@@ -1,0 +1,162 @@
+name: 📰 Générer Journal Vidéo
+
+on:
+  # ── Déclenchement manuel depuis l'onglet Actions ──
+  workflow_dispatch:
+    inputs:
+      nb_news:
+        description: "Nombre d'actualités (3-10)"
+        required: false
+        default: "10"
+        type: string
+      mode:
+        description: "Mode de génération"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full        # Scraping réel + Kokoro TTS
+          - demo        # News simulées (sans clés API)
+          - test        # Tests seulement, pas de vidéo
+
+  # ── Cron quotidien — chaque matin à 7h00 UTC ──
+  schedule:
+    - cron: "0 7 * * *"
+
+jobs:
+  generate:
+    name: 🎬 Pipeline News → Vidéo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Récupérer le code ──
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python ──
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Dépendances système ──
+      - name: 🔧 Installer dépendances système
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y espeak-ng ffmpeg libsndfile1
+          espeak-ng --version
+          ffmpeg -version | head -1
+
+      # ── 4. Dépendances Python ──
+      - name: 📦 Installer dépendances Python
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "✅ Packages installés :"
+          pip list | grep -E "moviepy|kokoro|soundfile|Pillow|requests|feedparser|numpy"
+
+      # ── 5. Tests (toujours) ──
+      - name: 🧪 Lancer les tests
+        run: python3 test_pipeline.py --quick
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          UNSPLASH_KEY:  ${{ secrets.UNSPLASH_KEY }}
+
+      # ── 6. Générer la vidéo ──
+      - name: 🎬 Générer le journal vidéo
+        if: ${{ github.event.inputs.mode != 'test' }}
+        run: |
+          # Adapter le nombre de news si fourni manuellement
+          NB=${{ github.event.inputs.nb_news || '10' }}
+          MODE=${{ github.event.inputs.mode || 'full' }}
+
+          echo "▶ Mode : $MODE | News : $NB"
+
+          if [ "$MODE" = "demo" ]; then
+            # Mode demo : pas besoin de clés API
+            python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          import news_video_generator as m
+          from pathlib import Path
+          import os
+
+          m.CONFIG['TOP_N'] = int('$NB')
+          output_dir = Path('output')
+          photos_dir = output_dir / 'photos'
+          audio_dir  = output_dir / 'audio'
+          for d in [output_dir, photos_dir, audio_dir]:
+              d.mkdir(parents=True, exist_ok=True)
+
+          script_data = m._demo_news(m.CONFIG['TOP_N'])
+          photo_paths = m.get_photos(script_data, m.CONFIG, photos_dir)
+          segments    = m.generate_all_audio(script_data, m.CONFIG, audio_dir)
+          video_path  = m.build_video(segments, photo_paths, script_data, m.CONFIG, output_dir)
+          print(f'VIDEO_PATH={video_path}')
+          size = os.path.getsize(video_path) / 1_000_000
+          print(f'VIDEO_SIZE={size:.1f}MB')
+          "
+          else
+            # Mode full : utilise les vraies clés API
+            python3 -c "
+          import sys, os
+          sys.path.insert(0, '.')
+          import news_video_generator as m
+          from pathlib import Path
+
+          m.CONFIG['TOP_N']        = int('$NB')
+          m.CONFIG['ANTHROPIC_KEY'] = os.environ.get('ANTHROPIC_KEY', m.CONFIG['ANTHROPIC_KEY'])
+          m.CONFIG['UNSPLASH_KEY']  = os.environ.get('UNSPLASH_KEY',  m.CONFIG['UNSPLASH_KEY'])
+          m.CONFIG['NEWSAPI_KEY']   = os.environ.get('NEWSAPI_KEY',   m.CONFIG['NEWSAPI_KEY'])
+
+          output_dir = Path('output')
+          photos_dir = output_dir / 'photos'
+          audio_dir  = output_dir / 'audio'
+          for d in [output_dir, photos_dir, audio_dir]:
+              d.mkdir(parents=True, exist_ok=True)
+
+          script_data = m.get_news(m.CONFIG)
+          photo_paths = m.get_photos(script_data, m.CONFIG, photos_dir)
+          segments    = m.generate_all_audio(script_data, m.CONFIG, audio_dir)
+          video_path  = m.build_video(segments, photo_paths, script_data, m.CONFIG, output_dir)
+          size = os.path.getsize(video_path) / 1_000_000
+          print(f'✅ Vidéo : {video_path} ({size:.1f}MB)')
+          "
+          fi
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          UNSPLASH_KEY:  ${{ secrets.UNSPLASH_KEY }}
+          NEWSAPI_KEY:   ${{ secrets.NEWSAPI_KEY }}
+
+      # ── 7. Upload la vidéo comme artifact GitHub ──
+      - name: 📤 Upload vidéo (artifact)
+        if: ${{ github.event.inputs.mode != 'test' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: journal-video-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            output/*.json
+          retention-days: 7   # Gardé 7 jours (gratuit sur GitHub)
+          if-no-files-found: error
+
+      # ── 8. Résumé dans le workflow ──
+      - name: 📊 Résumé
+        if: always()
+        run: |
+          echo "## 📰 Journal Vidéo — Résumé" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Paramètre | Valeur |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Date | $(date '+%d/%m/%Y %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mode | ${{ github.event.inputs.mode || 'full (cron)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| News | ${{ github.event.inputs.nb_news || '10' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run # | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f output/*.mp4 ] 2>/dev/null; then
+            SIZE=$(du -sh output/*.mp4 2>/dev/null | cut -f1)
+            echo "| Taille vidéo | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Vidéo disponible dans les artifacts ci-dessus** (onglet Summary)" >> $GITHUB_STEP_SUMMARY
+          fi
