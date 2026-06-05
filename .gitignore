@@ -1,0 +1,23 @@
+# Environnement
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Sorties générées
+output/
+
+# Modèles Kokoro (téléchargés automatiquement)
+*.onnx
+voices-v1.0.bin
+
+# Cache HuggingFace
+~/.cache/huggingface/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
