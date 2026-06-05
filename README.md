@@ -8,7 +8,6 @@ Scraping actualités → Script IA (Claude) → Photos (Unsplash) → Voix (Koko
 ```
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
 ![TTS](https://img.shields.io/badge/TTS-Kokoro%2082M-purple)
 ![Format](https://img.shields.io/badge/Format-9:16%20Vertical-orange)
 
@@ -144,7 +143,7 @@ python3 tts_kokoro.py "Bonjour, ceci est un test." test.mp3
 
 ## 📄 Licence
 
-MIT — libre d'utilisation, modification et distribution.
+**Tous droits réservés © ybachir** — Ce projet est privé, aucune utilisation, copie ou distribution n'est autorisée sans permission explicite de l'auteur.
 
 ---
 
