@@ -104,16 +104,59 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 
 ## 🗺️ Roadmap
 
-- [x] ✅ Étape 1 — Collecte news via RSS + Groq (Llama 3.3 gratuit)
+- [x] ✅ Collecte news via RSS + Groq (Llama 3.3 gratuit)
 - [x] ✅ Template vidéo premium sombre/doré
-- [x] ✅ TTS edge-tts (Microsoft Neural)
+- [x] ✅ TTS edge-tts (Microsoft Neural) + retry x3 + timeout
 - [x] ✅ Encodage ffmpeg direct (rapide)
-- [x] ✅ GitHub Actions workflow (cron 7h UTC, modes full/demo/test)
-- [ ] 🎵 Musique de fond (jingle + ambiance)
-- [ ] 📝 Sous-titres animés (style karaoke)
-- [ ] 🎞️ Transitions entre les slides
-- [ ] 📲 Publication automatique Instagram / TikTok
+- [x] ✅ Validation MP4 (ffprobe) + nettoyage automatique
+- [x] ✅ Transitions fondu noir 0.3s entre les segments
+- [x] ✅ Sous-titres animés mot par mot (ffmpeg drawtext)
+- [x] ✅ Musique de fond ambient (mix -23dB, boucle, fade out)
+- [x] ✅ GitHub Actions workflow (cron 7h UTC, publication automatique)
+- [x] ✅ Publication YouTube (Data API v3)
+- [x] ✅ Publication Instagram Reels (Meta Graph API)
 - [ ] 🌍 Support multilingue (EN, ES, AR…)
+- [ ] 📊 Dashboard stats (vues, likes par vidéo)
+
+---
+
+## 📤 Publication automatique
+
+### YouTube
+```bash
+# 1. Installer les dépendances
+pip install google-api-python-client google-auth-oauthlib
+
+# 2. Télécharger client_secrets.json depuis Google Cloud Console
+#    (YouTube Data API v3 → Credentials → OAuth 2.0 → Desktop App)
+
+# 3. Générer le token (une seule fois en local)
+python3 generate_youtube_token.py
+
+# 4. Ajouter dans GitHub Secrets :
+#    YOUTUBE_TOKEN_JSON  → contenu de youtube_token_b64.txt
+#    YOUTUBE_CLIENT_JSON → contenu de client_secrets_b64.txt
+```
+
+### Instagram Reels
+```bash
+# Prérequis : compte Instagram Business ou Créateur
+# 1. Créer une app sur developers.facebook.com
+# 2. Obtenir les permissions instagram_content_publish
+# 3. Générer un token longue durée (60 jours)
+
+# Ajouter dans GitHub Secrets :
+#    INSTAGRAM_USER_ID → ID numérique du compte
+#    INSTAGRAM_TOKEN   → access token longue durée
+#    VIDEO_PUBLIC_URL  → URL publique du MP4 (requis par Meta)
+```
+
+### Publication manuelle
+```bash
+python3 publish.py --video output/journal_xxx.mp4 --platform youtube
+python3 publish.py --video output/journal_xxx.mp4 --platform instagram
+python3 publish.py --video output/journal_xxx.mp4 --platform all
+```
 
 ---
 
