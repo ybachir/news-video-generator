@@ -343,35 +343,71 @@ def get_photos(script_data: dict, config: dict, photos_dir: Path) -> list[str]:
 #  ÉTAPE 3 — AUDIO (edge-tts → espeak fallback)
 # ═══════════════════════════════════════════════════════════════
 
+EDGE_TTS_VOICE    = "fr-FR-DeniseNeural"
+EDGE_TTS_RATE     = "+8%"
+EDGE_TTS_RETRIES  = 3
+EDGE_TTS_TIMEOUT  = 20   # secondes par tentative
+
+
 def text_to_wav_edge(text: str, wav_path: str) -> bool:
     """
     Synthèse vocale via edge-tts (Microsoft Neural — gratuit, non officiel).
-    Voix : fr-FR-DeniseNeural (meilleure voix FR disponible gratuitement).
+    Voix    : fr-FR-DeniseNeural
+    Retries : 3 tentatives avec backoff exponentiel
+    Timeout : 20s par tentative (évite les hangs sur GitHub Actions)
     """
     try:
         import edge_tts
-        async def _run():
-            communicate = edge_tts.Communicate(text, voice="fr-FR-DeniseNeural", rate="+8%")
-            # edge-tts génère du MP3 directement
-            mp3_tmp = wav_path.replace(".wav", "_edge.mp3")
-            await communicate.save(mp3_tmp)
-            return mp3_tmp
-        mp3_tmp = asyncio.run(_run())
-        # Convertir MP3 → WAV via ffmpeg pour uniformité
-        r = subprocess.run(
-            ["ffmpeg", "-y", "-i", mp3_tmp, wav_path],
-            capture_output=True
-        )
-        try:
-            os.remove(mp3_tmp)
-        except Exception:
-            pass
-        return r.returncode == 0 and os.path.exists(wav_path)
     except ImportError:
         return False
-    except Exception as e:
-        print(f"  ⚠️  edge-tts erreur : {e}")
-        return False
+
+    mp3_tmp = wav_path.replace(".wav", "_edge.mp3")
+
+    async def _fetch():
+        communicate = edge_tts.Communicate(
+            text, voice=EDGE_TTS_VOICE, rate=EDGE_TTS_RATE
+        )
+        await communicate.save(mp3_tmp)
+
+    for attempt in range(1, EDGE_TTS_RETRIES + 1):
+        try:
+            # Timeout via asyncio.wait_for
+            asyncio.run(
+                asyncio.wait_for(_fetch(), timeout=EDGE_TTS_TIMEOUT)
+            )
+            if not os.path.exists(mp3_tmp) or os.path.getsize(mp3_tmp) < 1000:
+                raise ValueError("Fichier MP3 vide ou absent")
+
+            # MP3 → WAV
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-i", mp3_tmp, wav_path],
+                capture_output=True
+            )
+            try:
+                os.remove(mp3_tmp)
+            except Exception:
+                pass
+
+            if r.returncode == 0 and os.path.exists(wav_path):
+                return True
+            raise ValueError(f"ffmpeg conversion échouée : {r.stderr[-100:]}")
+
+        except asyncio.TimeoutError:
+            print(f"  ⚠️  edge-tts timeout (tentative {attempt}/{EDGE_TTS_RETRIES})")
+        except Exception as e:
+            print(f"  ⚠️  edge-tts erreur (tentative {attempt}/{EDGE_TTS_RETRIES}) : {e}")
+
+        if attempt < EDGE_TTS_RETRIES:
+            time.sleep(2 ** attempt)   # backoff : 2s, 4s
+
+    # Nettoyage si le MP3 temporaire traîne
+    try:
+        if os.path.exists(mp3_tmp):
+            os.remove(mp3_tmp)
+    except Exception:
+        pass
+
+    return False
 
 
 def text_to_wav_espeak(text: str, wav_path: str) -> bool:
@@ -781,19 +817,35 @@ def build_video(segments: list[dict], photo_paths: list[str],
     out_path   = str(output_dir / f"journal_{timestamp}.mp4")
     clip_paths = []
 
+    # Fondu noir : 0.3s en entrée ET sortie de chaque clip
+    FADE_D = 0.3
+
     for i, seg in enumerate(segment_files):
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
         dur      = seg["duration"]
 
+        # Filtre vidéo : scale + fade in + fade out
+        vf = (
+            f"scale={W}:{H},"
+            f"fade=t=in:st=0:d={FADE_D}:color=black,"
+            f"fade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}:color=black"
+        )
+
         if seg["audio"] and os.path.exists(seg["audio"]):
+            # Filtre audio : fade in + fade out (évite les clics)
+            af = (
+                f"afade=t=in:st=0:d={FADE_D},"
+                f"afade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}"
+            )
             cmd = [
                 "ffmpeg", "-y",
                 "-loop", "1", "-i", seg["frame"],
                 "-i", seg["audio"],
                 "-c:v", "libx264", "-preset", "fast",
                 "-c:a", "aac", "-b:a", "128k",
+                "-vf", vf,
+                "-af", af,
                 "-shortest",
-                "-vf", f"scale={W}:{H}",
                 "-r", str(config["FPS"]),
                 clip_out
             ]
@@ -803,7 +855,7 @@ def build_video(segments: list[dict], photo_paths: list[str],
                 "-loop", "1", "-i", seg["frame"],
                 "-t", str(dur),
                 "-c:v", "libx264", "-preset", "fast",
-                "-vf", f"scale={W}:{H}",
+                "-vf", vf,
                 "-r", str(config["FPS"]),
                 clip_out
             ]
@@ -811,6 +863,7 @@ def build_video(segments: list[dict], photo_paths: list[str],
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode == 0 and os.path.exists(clip_out):
             clip_paths.append(clip_out)
+            print(f"  ✂️   Clip {i:02d} OK  ({dur:.1f}s + fondu {FADE_D}s)")
         else:
             print(f"  ⚠️  Clip {i} échoué : {r.stderr[-150:]}")
 
