@@ -737,6 +737,83 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
 #  ÉTAPE 4 — ASSEMBLAGE VIDÉO (ffmpeg direct)
 # ═══════════════════════════════════════════════════════════════
 
+def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
+    """
+    Génère un filtre ffmpeg drawtext pour sous-titres animés mot par mot.
+
+    Principe :
+    - Le texte est découpé en groupes de 3 mots max (plus lisible sur mobile)
+    - Chaque groupe apparaît pendant duration/nb_groupes secondes
+    - Style : fond semi-transparent noir, texte blanc, bordure noire
+    - Position : bas de l'écran (au-dessus de la source)
+
+    Retourne une string filtre ffmpeg prête à injecter dans -vf.
+    """
+    # Découper en groupes de 3 mots
+    words  = text.split()
+    groups = []
+    for i in range(0, len(words), 3):
+        groups.append(" ".join(words[i:i+3]))
+
+    if not groups:
+        return ""
+
+    nb       = len(groups)
+    # Laisser 0.3s de marge (fade in/out) de chaque côté
+    margin   = 0.3
+    usable   = max(0.5, duration - 2 * margin)
+    per_grp  = usable / nb
+
+    # Position : centré horizontalement, à 200px du bas
+    x = "(w-text_w)/2"
+    y = f"{H - 220}"
+
+    # Fonte : DejaVu Bold si disponible
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    import os
+    if not os.path.exists(font_path):
+        font_path = ""  # ffmpeg utilisera la fonte par défaut
+
+    font_opt = f"fontfile={font_path}:" if font_path else ""
+
+    filters = []
+    for idx, grp in enumerate(groups):
+        t_start = margin + idx * per_grp
+        t_end   = t_start + per_grp
+
+        # Échapper les caractères spéciaux ffmpeg
+        grp_escaped = (grp
+            .replace("\\", "\\\\")
+            .replace("'",  "’")      # apostrophe typographique
+            .replace(":",  "\\:")
+            .replace(",",  "\\,")
+            .replace("[",  "\\[")
+            .replace("]",  "\\]")
+            .replace("(",  "\\(")
+            .replace(")",  "\\)")
+        )
+
+        # Fond semi-transparent via box
+        f = (
+            f"drawtext="
+            f"{font_opt}"
+            f"text='{grp_escaped}':'
+            f"fontsize=42:"
+            f"fontcolor=white:"
+            f"borderw=2:"
+            f"bordercolor=black:"
+            f"box=1:"
+            f"boxcolor=black@0.55:"
+            f"boxborderw=12:"
+            f"x={x}:"
+            f"y={y}:"
+            f"enable='between(t,{t_start:.3f},{t_end:.3f})'"
+        )
+        filters.append(f)
+
+    return ",".join(filters)
+
+
 def validate_mp4(path: str) -> tuple[bool, str]:
     """
     Vérifie qu'un MP4 est lisible et non corrompu via ffprobe.
@@ -824,12 +901,20 @@ def build_video(segments: list[dict], photo_paths: list[str],
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
         dur      = seg["duration"]
 
-        # Filtre vidéo : scale + fade in + fade out
-        vf = (
-            f"scale={W}:{H},"
-            f"fade=t=in:st=0:d={FADE_D}:color=black,"
-            f"fade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}:color=black"
-        )
+        # ── Filtre vidéo : scale + fade + sous-titres animés ──
+        sub_filter = ""
+        sub_text   = seg.get("text", "") or seg.get("titre", "")
+        if sub_text and dur > 1:
+            sub_filter = generate_subtitle_filter(sub_text, dur, W, H)
+
+        vf_parts = [
+            f"scale={W}:{H}",
+            f"fade=t=in:st=0:d={FADE_D}:color=black",
+            f"fade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}:color=black",
+        ]
+        if sub_filter:
+            vf_parts.append(sub_filter)
+        vf = ",".join(vf_parts)
 
         if seg["audio"] and os.path.exists(seg["audio"]):
             # Filtre audio : fade in + fade out (évite les clics)
