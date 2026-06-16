@@ -798,7 +798,7 @@ def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
         f = (
             f"drawtext="
             f"{font_opt}"
-            f"text='{grp_escaped}':'
+            f"text='{grp_escaped}':"
             f"fontsize=42:"
             f"fontcolor=white:"
             f"borderw=2:"
