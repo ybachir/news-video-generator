@@ -108,6 +108,7 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 - [x] ✅ Template vidéo premium sombre/doré
 - [x] ✅ TTS edge-tts (Microsoft Neural)
 - [x] ✅ Encodage ffmpeg direct (rapide)
+- [x] ✅ GitHub Actions workflow (cron 7h UTC, modes full/demo/test)
 - [ ] 🎵 Musique de fond (jingle + ambiance)
 - [ ] 📝 Sous-titres animés (style karaoke)
 - [ ] 🎞️ Transitions entre les slides
@@ -123,3 +124,4 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 ---
 
 *Généré avec ❤️ par Claude (Anthropic)*
+
