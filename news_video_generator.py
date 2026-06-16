@@ -35,6 +35,7 @@ CONFIG = {
     "VIDEO_H":       1920,
     "FPS":           24,
     "OUTPUT_DIR":    "./output",
+    "MUSIC_VOLUME":  0.07,    # Volume musique de fond (0.0 = off, 0.07 = -23dB sous la voix)
 }
 
 W, H = CONFIG["VIDEO_W"], CONFIG["VIDEO_H"]
@@ -814,6 +815,74 @@ def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
     return ",".join(filters)
 
 
+def get_music_path(output_dir: Path) -> str | None:
+    """
+    Cherche un fichier musique de fond dans cet ordre :
+    1. output/music.mp3 (fichier custom posé par l'utilisateur)
+    2. assets/ambient_news.mp3 (bundlé dans le repo)
+    Retourne None si aucun fichier trouvé.
+    """
+    candidates = [
+        output_dir / "music.mp3",
+        Path("assets") / "ambient_news.mp3",
+        Path("ambient_news.mp3"),
+    ]
+    for p in candidates:
+        if p.exists() and p.stat().st_size > 10_000:
+            return str(p)
+    return None
+
+
+def mix_background_music(video_path: str, music_path: str,
+                          volume: float, output_path: str) -> bool:
+    """
+    Mixe une musique de fond sous la piste audio de la vidéo.
+
+    - La musique est mise en boucle pour couvrir toute la durée
+    - Volume réduit à `volume` (0.07 ≈ -23dB — inaudible mais présente)
+    - Fade out 2s en fin de vidéo
+    - La piste voix reste intacte et prioritaire
+    """
+    # Obtenir la durée de la vidéo
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+        capture_output=True, text=True
+    )
+    try:
+        total_dur = float(r.stdout.strip())
+    except Exception:
+        print("  ⚠️  Impossible de lire la durée vidéo — musique ignorée")
+        return False
+
+    fadeout_start = max(0, total_dur - 2.0)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-stream_loop", "-1", "-i", music_path,   # boucle infinie
+        "-filter_complex",
+        (
+            f"[1:a]volume={volume},"               # réduire le volume
+            f"afade=t=out:st={fadeout_start:.2f}:d=2.0,"  # fade out final
+            f"atrim=duration={total_dur:.2f}[music];"      # couper à la durée exacte
+            "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+        ),
+        "-map", "0:v",
+        "-map", "[aout]",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        output_path
+    ]
+
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"  ⚠️  Mix musique échoué : {r.stderr[-200:]}")
+        return False
+    return True
+
+
 def validate_mp4(path: str) -> tuple[bool, str]:
     """
     Vérifie qu'un MP4 est lisible et non corrompu via ffprobe.
@@ -1032,6 +1101,22 @@ def main():
     except RuntimeError as e:
         print(f"\n❌ PIPELINE ÉCHOUÉ : {e}")
         sys.exit(1)
+
+    # 5. Musique de fond (optionnel)
+    music_path = get_music_path(output_dir)
+    if music_path and CONFIG["MUSIC_VOLUME"] > 0:
+        print(f"\n🎵 ÉTAPE 5 — Mixage musique de fond ({music_path})...")
+        mixed_path = video_path.replace(".mp4", "_music.mp4")
+        ok = mix_background_music(
+            video_path, music_path, CONFIG["MUSIC_VOLUME"], mixed_path
+        )
+        if ok and os.path.exists(mixed_path):
+            os.replace(mixed_path, video_path)   # remplace la vidéo finale
+            print("  ✅ Musique mixée")
+        else:
+            print("  ⚠️  Mix échoué — vidéo sans musique conservée")
+    else:
+        print("\n🎵 Pas de musique trouvée — dépose assets/ambient_news.mp3 pour l'activer")
 
     elapsed = time.time() - t0
     mins, secs = divmod(int(elapsed), 60)
