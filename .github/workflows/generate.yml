@@ -12,27 +12,15 @@ on:
           - full
           - demo
           - test
-      publish:
-        description: "Publier après génération ?"
-        required: false
-        default: "yes"
-        type: choice
-        options:
-          - yes
-          - no
 
   schedule:
     - cron: "0 7 * * *"
 
 jobs:
   generate:
-    name: 🎬 Pipeline News → Vidéo → Publication
+    name: 🎬 Pipeline News → Vidéo
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
-    env:
-      HAS_YOUTUBE:   ${{ secrets.YOUTUBE_TOKEN_JSON != '' && 'true' || 'false' }}
-      HAS_INSTAGRAM: ${{ secrets.INSTAGRAM_TOKEN != '' && 'true' || 'false' }}
 
     steps:
 
@@ -56,10 +44,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          if [ "$HAS_YOUTUBE" = "true" ]; then
-            pip install google-api-python-client google-auth-oauthlib
-            echo "✅ YouTube API installée"
-          fi
 
       - name: 🧪 Tests rapides
         run: python3 test_pipeline.py --quick
@@ -71,7 +55,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'demo' }}
         run: python3 run_pipeline.py --demo
 
-      - name: 🎬 Générer (mode full)
+      - name: 🎬 Générer (mode full / cron)
         if: ${{ github.event.inputs.mode != 'demo' && github.event.inputs.mode != 'test' }}
         run: python3 run_pipeline.py
         env:
@@ -88,25 +72,6 @@ jobs:
             output/*.json
           retention-days: 7
           if-no-files-found: error
-
-      - name: 📺 Publier sur YouTube
-        if: ${{ github.event.inputs.mode != 'test' && github.event.inputs.publish != 'no' && env.HAS_YOUTUBE == 'true' }}
-        run: |
-          VIDEO=$(ls output/*.mp4 | head -1)
-          python3 publish.py --video "$VIDEO" --platform youtube
-        env:
-          YOUTUBE_TOKEN_JSON:  ${{ secrets.YOUTUBE_TOKEN_JSON }}
-          YOUTUBE_CLIENT_JSON: ${{ secrets.YOUTUBE_CLIENT_JSON }}
-
-      - name: 📸 Publier sur Instagram
-        if: ${{ github.event.inputs.mode != 'test' && github.event.inputs.publish != 'no' && env.HAS_INSTAGRAM == 'true' }}
-        run: |
-          VIDEO=$(ls output/*.mp4 | head -1)
-          python3 publish.py --video "$VIDEO" --platform instagram
-        env:
-          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
-          INSTAGRAM_TOKEN:   ${{ secrets.INSTAGRAM_TOKEN }}
-          VIDEO_PUBLIC_URL:  ${{ secrets.VIDEO_PUBLIC_URL }}
 
       - name: 📊 Résumé
         if: always()
