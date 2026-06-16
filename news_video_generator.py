@@ -701,13 +701,54 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
 #  ÉTAPE 4 — ASSEMBLAGE VIDÉO (ffmpeg direct)
 # ═══════════════════════════════════════════════════════════════
 
+def validate_mp4(path: str) -> tuple[bool, str]:
+    """
+    Vérifie qu'un MP4 est lisible et non corrompu via ffprobe.
+    Retourne (ok, message).
+    """
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=duration,width,height,codec_name",
+        "-of", "json", path
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        return False, f"ffprobe erreur : {r.stderr[:200]}"
+    try:
+        info = json.loads(r.stdout)
+        streams = info.get("streams", [])
+        if not streams:
+            return False, "Aucun stream vidéo détecté"
+        s = streams[0]
+        w, h   = s.get("width", 0), s.get("height", 0)
+        codec  = s.get("codec_name", "?")
+        dur    = float(s.get("duration", 0))
+        if dur < 5:
+            return False, f"Durée trop courte : {dur:.1f}s"
+        if w != W or h != H:
+            return False, f"Résolution incorrecte : {w}×{h} (attendu {W}×{H})"
+        return True, f"{codec} {w}×{h} {dur:.1f}s {os.path.getsize(path)/1e6:.1f}MB"
+    except Exception as e:
+        return False, f"Erreur parsing ffprobe : {e}"
+
+
+def cleanup_frames(frames_dir: Path):
+    """Supprime le dossier frames temporaire après encodage."""
+    try:
+        shutil.rmtree(frames_dir)
+        print(f"  🧹 Frames supprimées : {frames_dir}")
+    except Exception as e:
+        print(f"  ⚠️  Nettoyage frames échoué : {e}")
+
+
 def build_video(segments: list[dict], photo_paths: list[str],
                 script_data: dict, config: dict, output_dir: Path) -> str:
     print("\n🎬 ÉTAPE 4 — Assemblage et encodage de la vidéo...")
-    fonts     = _fonts()
+    fonts      = _fonts()
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(exist_ok=True)
-    photo_map = {i + 1: p for i, p in enumerate(photo_paths)}
+    photo_map  = {i + 1: p for i, p in enumerate(photo_paths)}
 
     # ── Rendre chaque frame en PNG ──
     segment_files = []
@@ -723,31 +764,28 @@ def build_video(segments: list[dict], photo_paths: list[str],
             photo_p = photo_map.get(seg["index"], list(photo_map.values())[0])
             frame   = render_news_frame(seg, photo_p, fonts)
 
-        # Sauvegarder frame PNG
         frame_path = str(frames_dir / f"frame_{idx:02d}.png")
         Image.fromarray(frame).save(frame_path)
 
         segment_files.append({
-            "frame": frame_path,
-            "audio": seg.get("audio"),
+            "frame":    frame_path,
+            "audio":    seg.get("audio"),
             "duration": dur,
-            "label": seg.get("titre", stype)[:40],
+            "label":    seg.get("titre", stype)[:40],
         })
         print(f"  🖼️  [{stype:5}] {segment_files[-1]['label']:<42} {dur:.1f}s")
 
-    # ── Assembler avec ffmpeg via concat ──
+    # ── Encoder chaque segment en clip MP4 ──
     print("\n  ⚙️  Encodage MP4 via ffmpeg...")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    out_path  = str(output_dir / f"journal_{timestamp}.mp4")
-
-    # Construire la liste de clips individuels puis concaténer
+    timestamp  = datetime.now().strftime("%Y%m%d_%H%M")
+    out_path   = str(output_dir / f"journal_{timestamp}.mp4")
     clip_paths = []
+
     for i, seg in enumerate(segment_files):
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
-        dur = seg["duration"]
+        dur      = seg["duration"]
 
         if seg["audio"] and os.path.exists(seg["audio"]):
-            # Clip avec audio
             cmd = [
                 "ffmpeg", "-y",
                 "-loop", "1", "-i", seg["frame"],
@@ -760,7 +798,6 @@ def build_video(segments: list[dict], photo_paths: list[str],
                 clip_out
             ]
         else:
-            # Clip image seule
             cmd = [
                 "ffmpeg", "-y",
                 "-loop", "1", "-i", seg["frame"],
@@ -772,16 +809,20 @@ def build_video(segments: list[dict], photo_paths: list[str],
             ]
 
         r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode == 0:
+        if r.returncode == 0 and os.path.exists(clip_out):
             clip_paths.append(clip_out)
+        else:
+            print(f"  ⚠️  Clip {i} échoué : {r.stderr[-150:]}")
 
-    # Fichier de concaténation
+    if not clip_paths:
+        raise RuntimeError("Aucun clip généré — pipeline interrompu")
+
+    # ── Concaténation finale ──
     concat_file = str(frames_dir / "concat.txt")
     with open(concat_file, "w") as f:
         for cp in clip_paths:
             f.write(f"file '{cp}'\n")
 
-    # Concaténation finale
     cmd_final = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
@@ -794,11 +835,20 @@ def build_video(segments: list[dict], photo_paths: list[str],
     r = subprocess.run(cmd_final, capture_output=True, text=True)
 
     if r.returncode != 0:
-        print(f"  ❌ Erreur ffmpeg : {r.stderr[-300:]}")
-        sys.exit(1)
+        cleanup_frames(frames_dir)
+        raise RuntimeError(f"Concaténation ffmpeg échouée : {r.stderr[-300:]}")
 
-    size_mb = os.path.getsize(out_path) / 1_000_000
-    print(f"  ✅ Vidéo encodée : {size_mb:.1f} MB")
+    # ── Validation MP4 ──
+    ok, msg = validate_mp4(out_path)
+    if ok:
+        print(f"  ✅ Vidéo validée : {msg}")
+    else:
+        cleanup_frames(frames_dir)
+        raise RuntimeError(f"MP4 corrompu : {msg}")
+
+    # ── Nettoyage frames temporaires ──
+    cleanup_frames(frames_dir)
+
     return out_path
 
 
@@ -839,15 +889,20 @@ def main():
     segments = generate_all_audio(script_data, CONFIG, audio_dir)
 
     # 4. Vidéo
-    video_path = build_video(segments, photo_paths, script_data, CONFIG, output_dir)
+    try:
+        video_path = build_video(segments, photo_paths, script_data, CONFIG, output_dir)
+    except RuntimeError as e:
+        print(f"\n❌ PIPELINE ÉCHOUÉ : {e}")
+        sys.exit(1)
 
     elapsed = time.time() - t0
     mins, secs = divmod(int(elapsed), 60)
+    size_mb = os.path.getsize(video_path) / 1_000_000
     print(f"""
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  ✅ PIPELINE TERMINÉ en {mins}m{secs:02d}s
 ║
-║  📹 Vidéo  → {video_path}
+║  📹 Vidéo  → {video_path} ({size_mb:.1f} MB)
 ║  📋 Script → {script_path}
 ╚══════════════════════════════════════════════════════════════════════╝
 """)
