@@ -1,7 +1,6 @@
 name: 📰 Générer Journal Vidéo
 
 on:
-  # ── Déclenchement manuel ──
   workflow_dispatch:
     inputs:
       mode:
@@ -10,68 +9,72 @@ on:
         default: "full"
         type: choice
         options:
-          - full    # RSS + Groq + edge-tts (recommandé)
-          - demo    # News simulées, sans clés API
-          - test    # Tests seulement, pas de vidéo
+          - full
+          - demo
+          - test
+      publish:
+        description: "Publier après génération ?"
+        required: false
+        default: "yes"
+        type: choice
+        options:
+          - yes
+          - no
 
-  # ── Cron quotidien — chaque matin à 7h00 UTC ──
   schedule:
     - cron: "0 7 * * *"
 
 jobs:
   generate:
-    name: 🎬 Pipeline News → Vidéo
+    name: 🎬 Pipeline News → Vidéo → Publication
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
 
-      # ── 1. Checkout ──
       - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Python 3.11 ──
       - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      # ── 3. Dépendances système (ffmpeg + espeak fallback) ──
       - name: 🔧 Dépendances système
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg espeak-ng
           ffmpeg -version | head -1
-          espeak-ng --version
 
-      # ── 4. Dépendances Python ──
       - name: 📦 Dépendances Python
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip list | grep -E "moviepy|Pillow|requests|feedparser|numpy|edge"
+          # YouTube API (optionnel — installé seulement si token présent)
+          if [ -n "$YOUTUBE_TOKEN_JSON" ]; then
+            pip install google-api-python-client google-auth-oauthlib
+            echo "✅ YouTube API installée"
+          fi
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
 
-      # ── 5. Tests rapides ──
       - name: 🧪 Tests rapides
         run: python3 test_pipeline.py --quick
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
 
-      # ── 6. Générer la vidéo ──
       - name: 🎬 Générer le journal vidéo
         if: ${{ github.event.inputs.mode != 'test' }}
         run: |
           MODE=${{ github.event.inputs.mode || 'full' }}
-          echo "▶ Mode : $MODE"
           python3 -c "
           import sys, os
           sys.path.insert(0, '.')
           import news_video_generator as m
           from pathlib import Path
 
-          # Mode demo : forcer les news simulées
           if '$MODE' == 'demo':
               m.CONFIG['GROQ_API_KEY'] = ''
               m.CONFIG['UNSPLASH_KEY'] = ''
@@ -88,25 +91,51 @@ jobs:
           video_path  = m.build_video(segments, photo_paths, script_data, m.CONFIG, output_dir)
 
           size = os.path.getsize(video_path) / 1_000_000
-          print(f'✅ Vidéo générée : {video_path} ({size:.1f} MB)')
+          print(f'VIDEO_PATH={video_path}')
+          print(f'✅ Vidéo : {video_path} ({size:.1f}MB)')
           "
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
 
-      # ── 7. Upload artifact ──
-      - name: 📤 Upload vidéo
+      - name: 📤 Upload artifact
         if: ${{ github.event.inputs.mode != 'test' }}
         uses: actions/upload-artifact@v4
         with:
-          name: journal-${{ github.run_number }}-${{ github.run_attempt }}
+          name: journal-${{ github.run_number }}
           path: |
             output/*.mp4
             output/*.json
           retention-days: 7
           if-no-files-found: error
 
-      # ── 8. Résumé ──
+      - name: 📺 Publier sur YouTube
+        if: |
+          github.event.inputs.mode != 'test' &&
+          (github.event.inputs.publish != 'no') &&
+          secrets.YOUTUBE_TOKEN_JSON != ''
+        run: |
+          VIDEO=$(ls output/*.mp4 | head -1)
+          echo "Publication YouTube : $VIDEO"
+          python3 publish.py --video "$VIDEO" --platform youtube
+        env:
+          YOUTUBE_TOKEN_JSON:  ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_JSON: ${{ secrets.YOUTUBE_CLIENT_JSON }}
+
+      - name: 📸 Publier sur Instagram
+        if: |
+          github.event.inputs.mode != 'test' &&
+          (github.event.inputs.publish != 'no') &&
+          secrets.INSTAGRAM_TOKEN != ''
+        run: |
+          VIDEO=$(ls output/*.mp4 | head -1)
+          echo "Publication Instagram : $VIDEO"
+          python3 publish.py --video "$VIDEO" --platform instagram
+        env:
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_TOKEN:   ${{ secrets.INSTAGRAM_TOKEN }}
+          VIDEO_PUBLIC_URL:  ${{ secrets.VIDEO_PUBLIC_URL }}
+
       - name: 📊 Résumé
         if: always()
         run: |
@@ -116,10 +145,10 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Date | $(date '+%d/%m/%Y %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
           echo "| Mode | ${{ github.event.inputs.mode || 'full (cron)' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| News | 5 |" >> $GITHUB_STEP_SUMMARY
-          if ls output/*.mp4 2>/dev/null | head -1 | grep -q mp4; then
+          echo "| Publication | ${{ github.event.inputs.publish || 'yes' }} |" >> $GITHUB_STEP_SUMMARY
+          if ls output/*.mp4 2>/dev/null | grep -q mp4; then
             SIZE=$(du -sh output/*.mp4 2>/dev/null | cut -f1)
-            echo "| Taille | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            echo "| Taille vidéo | $SIZE |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **Vidéo disponible dans les Artifacts** (onglet Summary)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Vidéo disponible dans les Artifacts**" >> $GITHUB_STEP_SUMMARY
           fi
