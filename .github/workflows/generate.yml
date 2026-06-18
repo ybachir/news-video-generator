@@ -36,9 +36,11 @@ jobs:
       - name: 🔧 Dépendances système
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg espeak-ng
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
           ffmpeg -version | head -1
           espeak-ng --version
+          fc-list | grep -i dejavu || echo "⚠️ DejaVu non trouvée via fc-list"
+          ls -la /usr/share/fonts/truetype/dejavu/ 2>&1 || echo "⚠️ Dossier dejavu absent"
 
       - name: 📦 Dépendances Python
         run: |
