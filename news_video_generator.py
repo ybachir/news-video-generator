@@ -1025,10 +1025,14 @@ def build_video(segments: list[dict], photo_paths: list[str],
         raise RuntimeError("Aucun clip généré — pipeline interrompu")
 
     # ── Concaténation finale ──
+    # Chemins ABSOLUS dans concat.txt : ffmpeg résout les chemins relatifs
+    # par rapport au dossier du fichier concat.txt, pas au cwd — donc on
+    # utilise os.path.abspath pour éviter tout problème de double-préfixe.
     concat_file = str(frames_dir / "concat.txt")
     with open(concat_file, "w") as f:
         for cp in clip_paths:
-            f.write(f"file '{cp}'\n")
+            abs_cp = os.path.abspath(cp)
+            f.write(f"file '{abs_cp}'\n")
 
     cmd_final = [
         "ffmpeg", "-y",
