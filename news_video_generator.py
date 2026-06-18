@@ -769,12 +769,18 @@ def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
     x = "(w-text_w)/2"
     y = f"{H - 220}"
 
-    # Fonte : DejaVu Bold si disponible
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    # Fonte : chercher DejaVu Bold à plusieurs emplacements possibles
+    # (les runners GitHub Actions n'ont pas toujours le même chemin)
     import os
-    if not os.path.exists(font_path):
-        font_path = ""  # ffmpeg utilisera la fonte par défaut
+    font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+    font_path = next((p for p in font_candidates if os.path.exists(p)), "")
 
+    # Si aucune police trouvée sur le disque, ne PAS injecter fontfile= du tout
+    # (sinon ffmpeg plante sur un chemin invalide et peut faire échouer tout le filtre)
     font_opt = f"fontfile={font_path}:" if font_path else ""
 
     filters = []
@@ -1015,7 +1021,31 @@ def build_video(segments: list[dict], photo_paths: list[str],
             ]
 
         r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode == 0 and os.path.exists(clip_out):
+        clip_ok = r.returncode == 0 and os.path.exists(clip_out)
+
+        # Vérifier que le clip a bien une piste vidéo (pas juste audio)
+        if clip_ok:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", clip_out],
+                capture_output=True, text=True
+            )
+            if "video" not in probe.stdout:
+                clip_ok = False
+                print(f"  ⚠️  Clip {i} sans piste vidéo — retry sans sous-titres")
+                # Retry sans le filtre sous-titres (cause la plus probable)
+                vf_retry = ",".join(vf_parts[:3])  # scale + fades, sans drawtext
+                cmd_retry = [a if a != vf else vf_retry for a in cmd]
+                r2 = subprocess.run(cmd_retry, capture_output=True, text=True)
+                if r2.returncode == 0 and os.path.exists(clip_out):
+                    probe2 = subprocess.run(
+                        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                         "-show_entries", "stream=codec_type", "-of", "csv=p=0", clip_out],
+                        capture_output=True, text=True
+                    )
+                    clip_ok = "video" in probe2.stdout
+
+        if clip_ok:
             clip_paths.append(clip_out)
             print(f"  ✂️   Clip {i:02d} OK  ({dur:.1f}s + fondu {FADE_D}s)")
         else:
