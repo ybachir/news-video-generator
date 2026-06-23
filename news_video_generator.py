@@ -256,6 +256,7 @@ def _demo_news(n: int) -> dict:
 
 def download_unsplash_photo(keywords: list[str], api_key: str, path: str) -> bool:
     if not api_key:
+        print("  ⚠️  Unsplash : UNSPLASH_KEY absente/vide — fond généré utilisé")
         return False
     try:
         r = requests.get(
@@ -265,13 +266,20 @@ def download_unsplash_photo(keywords: list[str], api_key: str, path: str) -> boo
             timeout=12
         )
         if r.status_code != 200:
+            # Log explicite : code HTTP + corps de réponse (tronqué) pour diagnostiquer
+            # 401 = clé invalide, 403 = app non approuvée/quota, 404 = aucun résultat, etc.
+            print(f"  ⚠️  Unsplash HTTP {r.status_code} — {r.text[:200]}")
             return False
         img_url = r.json()["urls"]["regular"]
         ir = requests.get(img_url, timeout=25)
+        if ir.status_code != 200:
+            print(f"  ⚠️  Unsplash téléchargement image HTTP {ir.status_code}")
+            return False
         with open(path, "wb") as f:
             f.write(ir.content)
         return True
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠️  Unsplash exception : {type(e).__name__}: {e}")
         return False
 
 
