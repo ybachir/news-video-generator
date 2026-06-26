@@ -567,12 +567,13 @@ def _draw_newspaper_icon(draw: ImageDraw, cx: int, cy: int, size: int = 70):
     draw.rectangle([x0 + pad, y0 + pad, x1 - pad, y0 + pad + size * 0.14],
                     fill=(*PALETTE["gold"], 255))
     # Lignes de texte stylisées
-    line_y = y0 + pad + size * 0.32
-    line_h = size * 0.10
-    for i in range(3):
+    line_y    = y0 + pad + size * 0.32
+    line_h    = size * 0.10
+    full_w    = (x1 - pad) - (x0 + pad)
+    line_widths = [full_w, full_w, full_w * 0.6]  # dernière ligne plus courte
+    for i, w_i in enumerate(line_widths):
         ly = line_y + i * (line_h + size * 0.07)
-        lw = (x1 - pad) - (x0 + pad) if i < 2 else (x1 - pad) - (x0 + pad) * 1.6
-        draw.rectangle([x0 + pad, ly, x0 + pad + lw, ly + line_h],
+        draw.rectangle([x0 + pad, ly, x0 + pad + w_i, ly + line_h],
                         fill=(*PALETTE["white"], 220))
 
 
