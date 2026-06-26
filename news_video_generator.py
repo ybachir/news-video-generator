@@ -434,7 +434,7 @@ def wav_to_mp3(wav_path: str, mp3_path: str) -> bool:
     return r.returncode == 0 and os.path.exists(mp3_path)
 
 
-def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float]:
+def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float, str]:
     wav = str(audio_dir / f"{name}.wav")
     mp3 = str(audio_dir / f"{name}.mp3")
 
@@ -445,13 +445,13 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
     # Fallback espeak
     if not ok:
         ok = text_to_wav_espeak(text, wav)
-        engine = "espeak"
+        engine = "espeak-ng (fallback)"
 
     if not ok:
-        return None, 5.0
+        return None, 5.0, "échec"
 
     if not wav_to_mp3(wav, mp3):
-        return None, 5.0
+        return None, 5.0, "échec"
 
     try:
         os.remove(wav)
@@ -466,26 +466,29 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
     except Exception:
         dur = len(text.split()) / 2.5
 
-    return mp3, dur
+    return mp3, dur, engine
 
 
 def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list[dict]:
     print("\n🎙️  ÉTAPE 3 — Synthèse vocale (edge-tts / espeak fallback)...")
     audio_dir.mkdir(exist_ok=True)
     segments = []
+    engines_used = []
 
     # Intro
     intro_text = script_data.get("intro", "Bonjour, voici les actualités du jour.")
-    mp3, dur = make_audio(intro_text, "intro", audio_dir)
+    mp3, dur, engine = make_audio(intro_text, "intro", audio_dir)
+    engines_used.append(engine)
     segments.append({"type": "intro", "audio": mp3, "duration": dur,
                      "text": intro_text, "titre": "Journal du Monde"})
-    print(f"  ✅ Intro : {dur:.1f}s")
+    print(f"  ✅ Intro : {dur:.1f}s — moteur : {engine}")
 
     # News
     for i, item in enumerate(script_data["news"]):
         n    = i + 1
         text = f"Numéro {n}. {item['titre']}. {item['resume']}"
-        mp3, dur = make_audio(text, f"news_{n:02d}", audio_dir)
+        mp3, dur, engine = make_audio(text, f"news_{n:02d}", audio_dir)
+        engines_used.append(engine)
         segments.append({
             "type":      "news",
             "index":     n,
@@ -497,14 +500,20 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
             "categorie": item.get("categorie", "monde"),
             "keywords":  item.get("keywords_photo", []),
         })
-        print(f"  🎙️  #{n:2} {dur:.1f}s — {item['titre'][:55]}")
+        print(f"  🎙️  #{n:2} {dur:.1f}s — moteur : {engine} — {item['titre'][:45]}")
 
     # Outro
     outro_text = script_data.get("outro", "Merci et à bientôt.")
-    mp3, dur = make_audio(outro_text, "outro", audio_dir)
+    mp3, dur, engine = make_audio(outro_text, "outro", audio_dir)
+    engines_used.append(engine)
     segments.append({"type": "outro", "audio": mp3, "duration": dur,
                      "text": outro_text, "titre": "Merci"})
-    print(f"  ✅ Outro : {dur:.1f}s")
+    print(f"  ✅ Outro : {dur:.1f}s — moteur : {engine}")
+
+    n_espeak = sum(1 for e in engines_used if "espeak" in e)
+    if n_espeak > 0:
+        print(f"  ⚠️  ATTENTION : {n_espeak}/{len(engines_used)} segments en fallback espeak-ng "
+              f"(voix robotique, pauses marquées) — edge-tts a échoué sur ces segments")
 
     total = sum(s["duration"] for s in segments)
     print(f"  📊 Durée totale : {total:.0f}s ({total/60:.1f} min)")
