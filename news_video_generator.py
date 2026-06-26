@@ -65,13 +65,6 @@ CATEGORY_COLORS = {
     "monde":         (35,  35, 100),
 }
 
-CATEGORY_ICONS = {
-    "politique": "🏛", "economie": "📈", "technologie": "💻",
-    "science": "🔬", "sport": "🏆", "environnement": "🌿",
-    "sante": "🏥", "culture": "🎭", "societe": "👥", "monde": "🌍",
-}
-
-
 # ═══════════════════════════════════════════════════════════════
 #  ÉTAPE 1 — COLLECTE & STRUCTURATION DES NEWS
 #  RSS  →  Groq (Llama 3 gratuit)  →  JSON propre
@@ -559,6 +552,30 @@ def _draw_gold_line(draw: ImageDraw, x1: int, y: int, x2: int, thickness: int = 
     draw.rectangle([x1, y, x2, y + thickness], fill=PALETTE["gold"])
 
 
+def _draw_newspaper_icon(draw: ImageDraw, cx: int, cy: int, size: int = 70):
+    """
+    Icône "journal" dessinée en vectoriel pur (rectangle + lignes de texte stylisées).
+    Remplace l'emoji 📰 qui ne s'affiche pas avec DejaVu (glyphe manquant -> carré vide).
+    """
+    half = size // 2
+    x0, y0, x1, y1 = cx - half, cy - half, cx + half, cy + half
+    # Feuille de "journal"
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=6,
+                            outline=(*PALETTE["white"], 255), width=4)
+    # Bandeau "titre" en haut, plus épais
+    pad = size * 0.16
+    draw.rectangle([x0 + pad, y0 + pad, x1 - pad, y0 + pad + size * 0.14],
+                    fill=(*PALETTE["gold"], 255))
+    # Lignes de texte stylisées
+    line_y = y0 + pad + size * 0.32
+    line_h = size * 0.10
+    for i in range(3):
+        ly = line_y + i * (line_h + size * 0.07)
+        lw = (x1 - pad) - (x0 + pad) if i < 2 else (x1 - pad) - (x0 + pad) * 1.6
+        draw.rectangle([x0 + pad, ly, x0 + pad + lw, ly + line_h],
+                        fill=(*PALETTE["white"], 220))
+
+
 def render_intro(text: str, fonts: dict) -> np.ndarray:
     """Écran d'intro : fond sombre, logo centré, bandes dorées."""
     img  = Image.new("RGB", (W, H), PALETTE["bg"])
@@ -587,9 +604,8 @@ def render_intro(text: str, fonts: dict) -> np.ndarray:
     # Bordure gauche dorée
     draw.rectangle([pad, cy1, pad + 5, cy2], fill=(*PALETTE["gold"], 255))
 
-    # Emoji
-    draw.text((W // 2, H // 2 - 190), "📰",
-              font=fonts["bold_xl"], fill=(*PALETTE["white"], 255), anchor="mm")
+    # Icône "journal" dessinée en vectoriel (évite les glyphes emoji manquants)
+    _draw_newspaper_icon(draw, W // 2, H // 2 - 190, size=70)
 
     # JOURNAL
     draw.text((W // 2, H // 2 - 80), "JOURNAL",
@@ -662,10 +678,9 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     draw.text((cx, cy), str(n),
               font=fonts["bold_lg"], fill=(*PALETTE["bg"], 255), anchor="mm")
 
-    # ── Tag catégorie ──
+    # ── Tag catégorie (texte seul — pas d'icône emoji, plus fiable visuellement) ──
     cat     = seg.get("categorie", "monde")
-    cat_ico = CATEGORY_ICONS.get(cat, "🌍")
-    cat_tag = f"{cat_ico}  {cat.upper()}"
+    cat_tag = cat.upper()
     bb      = draw.textbbox((0, 0), cat_tag, font=fonts["regular_sm"])
     tag_w   = bb[2] - bb[0] + 28
     tag_x   = W - tag_w - 20
@@ -696,10 +711,12 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
                   font=fonts["regular_md"], fill=(*PALETTE["gray"], 215))
         y += 48
 
-    # Source (doré, bas)
+    # Source (doré, bas) — puce ronde vectorielle au lieu d'un emoji
     if seg.get("source"):
-        draw.text((pad, H - 65), f"📡  {seg['source']}",
-                  font=fonts["regular_sm"], fill=(*PALETTE["gold"], 200))
+        dot_y = H - 65
+        draw.ellipse([pad, dot_y - 5, pad + 10, dot_y + 5], fill=(*PALETTE["gold"], 220))
+        draw.text((pad + 22, dot_y), seg['source'],
+                  font=fonts["regular_sm"], fill=(*PALETTE["gold"], 200), anchor="lm")
 
     # Barre bas
     draw.rectangle([0, H - 5, W, H], fill=(*PALETTE["gold"], 255))
@@ -729,8 +746,7 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
     draw.rectangle([pad, H // 2 - 260, pad + 5, H // 2 + 260],
                    fill=(*PALETTE["gold"], 255))
 
-    draw.text((W // 2, H // 2 - 170), "📰",
-              font=fonts["bold_xl"], fill=(*PALETTE["white"], 255), anchor="mm")
+    _draw_newspaper_icon(draw, W // 2, H // 2 - 170, size=62)
     draw.text((W // 2, H // 2 - 60), "JOURNAL DU MONDE",
               font=fonts["bold_md"], fill=(*PALETTE["white"], 255), anchor="mm")
 
@@ -743,9 +759,9 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
                   font=fonts["regular_md"], fill=(*PALETTE["gray"], 200), anchor="mm")
         y0 += 50
 
-    # CTA
+    # CTA — texte seul, sans icônes emoji
     draw.text((W // 2, H // 2 + 160),
-              "👍 LIKE  •  🔔 ABONNE-TOI  •  💬 COMMENTE",
+              "LIKE  •  ABONNE-TOI  •  COMMENTE",
               font=fonts["regular_sm"], fill=(*PALETTE["gold"], 210), anchor="mm")
 
     return np.array(img.convert("RGB"))
