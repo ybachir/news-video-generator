@@ -153,6 +153,12 @@ Voici {len(articles)} articles RSS bruts :
 Sélectionne les {n} actualités les plus importantes et variées.
 Réécris chaque résumé en style journaliste TV (2-3 phrases, 50-70 mots, factuel, dynamique).
 
+Pour keywords_photo : choisis des mots-clés VISUELS et GÉNÉRIQUES adaptés à une
+recherche sur banque d'images (ex: "stadium", "courtroom", "hospital", "protest",
+"skyline", "factory", "soldiers") plutôt que des noms de pays ou de personnes précis,
+qui renvoient souvent aucun résultat. Le premier mot-clé doit être le plus
+représentatif visuellement du sujet.
+
 Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
 {{
   "news": [
