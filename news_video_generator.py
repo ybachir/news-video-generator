@@ -752,8 +752,18 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     _draw_gold_line(draw, pad, y + 6, pad + 100)
     y += 28
 
-    # Résumé (gris clair)
+    # Résumé (gris clair) — tronqué proprement à la dernière phrase complète
+    # si le texte dépasse 4 lignes (jamais de coupure en plein milieu d'une phrase)
     body_lines = _wrap(seg["text"], fonts["regular_md"], W - pad * 2, draw)
+    if len(body_lines) > 4:
+        shown_text = " ".join(body_lines[:4])
+        # Chercher le dernier point/!/? dans les 4 lignes affichées
+        last_punct = max(shown_text.rfind("."), shown_text.rfind("!"), shown_text.rfind("?"))
+        if last_punct >= len(shown_text) * 0.4:  # garder seulement si pas trop court
+            shown_text = shown_text[:last_punct + 1]
+        else:
+            shown_text = shown_text.rstrip() + "…"
+        body_lines = _wrap(shown_text, fonts["regular_md"], W - pad * 2, draw)
     for line in body_lines[:4]:
         draw.text((pad, y), line,
                   font=fonts["regular_md"], fill=(*PALETTE["gray"], 215))
