@@ -65,6 +65,21 @@ CATEGORY_COLORS = {
     "monde":         (35,  35, 100),
 }
 
+# Traduction FR -> EN pour le repli Unsplash (les requêtes en anglais
+# renvoient nettement plus de résultats que les catégories françaises)
+CATEGORY_EN = {
+    "politique":     "politics",
+    "economie":      "economy business",
+    "technologie":   "technology",
+    "science":       "science",
+    "sport":         "sport stadium",
+    "environnement": "nature environment",
+    "sante":         "health hospital",
+    "culture":       "culture art",
+    "societe":       "city people",
+    "monde":         "world news",
+}
+
 # ═══════════════════════════════════════════════════════════════
 #  ÉTAPE 1 — COLLECTE & STRUCTURATION DES NEWS
 #  RSS  →  Groq (Llama 3 gratuit)  →  JSON propre
@@ -247,33 +262,63 @@ def _demo_news(n: int) -> dict:
 #  ÉTAPE 2 — PHOTOS
 # ═══════════════════════════════════════════════════════════════
 
-def download_unsplash_photo(keywords: list[str], api_key: str, path: str) -> bool:
-    if not api_key:
-        print("  ⚠️  Unsplash : UNSPLASH_KEY absente/vide — fond généré utilisé")
-        return False
+def _unsplash_search(query: str, api_key: str, path: str) -> tuple[bool, int, str]:
+    """Une tentative de recherche Unsplash. Retourne (succès, status_code, message)."""
     try:
         r = requests.get(
             "https://api.unsplash.com/photos/random",
-            params={"query": " ".join(keywords), "orientation": "portrait"},
+            params={"query": query, "orientation": "portrait"},
             headers={"Authorization": f"Client-ID {api_key}"},
             timeout=12
         )
         if r.status_code != 200:
-            # Log explicite : code HTTP + corps de réponse (tronqué) pour diagnostiquer
-            # 401 = clé invalide, 403 = app non approuvée/quota, 404 = aucun résultat, etc.
-            print(f"  ⚠️  Unsplash HTTP {r.status_code} — {r.text[:200]}")
-            return False
+            return False, r.status_code, r.text[:200]
         img_url = r.json()["urls"]["regular"]
         ir = requests.get(img_url, timeout=25)
         if ir.status_code != 200:
-            print(f"  ⚠️  Unsplash téléchargement image HTTP {ir.status_code}")
-            return False
+            return False, ir.status_code, "échec téléchargement image"
         with open(path, "wb") as f:
             f.write(ir.content)
-        return True
+        return True, 200, "ok"
     except Exception as e:
-        print(f"  ⚠️  Unsplash exception : {type(e).__name__}: {e}")
+        return False, 0, f"{type(e).__name__}: {e}"
+
+
+def download_unsplash_photo(keywords: list[str], api_key: str, path: str,
+                             category: str | None = None) -> bool:
+    if not api_key:
+        print("  ⚠️  Unsplash : UNSPLASH_KEY absente/vide — fond généré utilisé")
         return False
+
+    # Stratégie en cascade : la requête complète est souvent trop spécifique
+    # (ex: "senegal iraq world cup football" -> 404 No photos found, car
+    # Unsplash traite la query comme un AND de tous les termes). On retombe
+    # progressivement sur des requêtes plus génériques qui ont presque
+    # toujours des résultats.
+    attempts = []
+    if keywords:
+        attempts.append(" ".join(keywords))          # requête complète
+        if len(keywords) > 1:
+            attempts.append(keywords[0])              # mot-clé le plus important seul
+    if category:
+        attempts.append(category)                    # catégorie générale (ex: "sport")
+    attempts.append("news")                          # filet de sécurité final
+
+    # Dédupliquer en gardant l'ordre
+    seen = set()
+    attempts = [a for a in attempts if not (a in seen or seen.add(a))]
+
+    last_status, last_msg = None, None
+    for query in attempts:
+        ok, status, msg = _unsplash_search(query, api_key, path)
+        if ok:
+            if query != attempts[0]:
+                print(f"  🖼️  Unsplash OK (repli sur '{query}' après échec de la requête initiale)")
+            return True
+        last_status, last_msg = status, msg
+
+    print(f"  ⚠️  Unsplash HTTP {last_status} — {last_msg} (essais : {attempts})")
+    return False
 
 
 def create_styled_background(keywords: list[str], category: str, number: int, path: str):
@@ -329,7 +374,8 @@ def get_photos(script_data: dict, config: dict, photos_dir: Path) -> list[str]:
         cat  = item.get("categorie", "monde")
         path = str(photos_dir / f"news_{n:02d}.jpg")
 
-        ok = download_unsplash_photo(kws, config["UNSPLASH_KEY"], path)
+        ok = download_unsplash_photo(kws, config["UNSPLASH_KEY"], path,
+                                      category=CATEGORY_EN.get(cat, "world news"))
         if ok:
             print(f"  🖼️  #{n:2} Unsplash OK  [{cat}]")
         else:
