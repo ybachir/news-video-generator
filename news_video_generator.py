@@ -35,7 +35,8 @@ CONFIG = {
     "VIDEO_H":       1920,
     "FPS":           30,
     "OUTPUT_DIR":    "./output",
-    "MUSIC_VOLUME":  0.07,    # Volume musique de fond (0.0 = off, 0.07 = -23dB sous la voix)
+    "MUSIC_VOLUME":  0.126,   # Volume musique de fond (-18dB sous la voix — comble les
+                              # pauses naturelles d'edge-tts entre phrases, sans couvrir la voix)
 }
 
 W, H = CONFIG["VIDEO_W"], CONFIG["VIDEO_H"]
@@ -952,7 +953,7 @@ def mix_background_music(video_path: str, music_path: str,
             f"[1:a]volume={volume},"               # réduire le volume
             f"afade=t=out:st={fadeout_start:.2f}:d=2.0,"  # fade out final
             f"atrim=duration={total_dur:.2f}[music];"      # couper à la durée exacte
-            "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+            "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
         ),
         "-map", "0:v",
         "-map", "[aout]",
