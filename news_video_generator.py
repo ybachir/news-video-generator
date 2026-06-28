@@ -427,17 +427,22 @@ EDGE_TTS_RETRIES  = 3
 EDGE_TTS_TIMEOUT  = 20   # secondes par tentative
 
 
-def text_to_wav_edge(text: str, wav_path: str) -> bool:
+def text_to_wav_edge(text: str, wav_path: str) -> tuple[bool, list[dict]]:
     """
     Synthèse vocale via edge-tts (Microsoft Neural — gratuit, non officiel).
     Voix    : fr-FR-DeniseNeural
     Retries : 3 tentatives avec backoff exponentiel
     Timeout : 20s par tentative (évite les hangs sur GitHub Actions)
+
+    Retourne (succès, word_timings) où word_timings est une liste de
+    {"word": str, "start": float, "end": float} en secondes, capturée
+    via les événements WordBoundary du flux edge-tts (nécessaire pour
+    les sous-titres animés mot par mot).
     """
     try:
         import edge_tts
     except ImportError:
-        return False
+        return False, []
 
     mp3_tmp = wav_path.replace(".wav", "_edge.mp3")
 
@@ -445,12 +450,25 @@ def text_to_wav_edge(text: str, wav_path: str) -> bool:
         communicate = edge_tts.Communicate(
             text, voice=EDGE_TTS_VOICE, rate=EDGE_TTS_RATE
         )
-        await communicate.save(mp3_tmp)
+        words = []
+        with open(mp3_tmp, "wb") as f:
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    f.write(chunk["data"])
+                elif chunk["type"] == "WordBoundary":
+                    # offset/duration sont en unités de 100ns (ticks) côté edge-tts
+                    start = chunk["offset"] / 1e7
+                    dur   = chunk["duration"] / 1e7
+                    words.append({
+                        "word":  chunk["text"],
+                        "start": start,
+                        "end":   start + dur,
+                    })
+        return words
 
     for attempt in range(1, EDGE_TTS_RETRIES + 1):
         try:
-            # Timeout via asyncio.wait_for
-            asyncio.run(
+            words = asyncio.run(
                 asyncio.wait_for(_fetch(), timeout=EDGE_TTS_TIMEOUT)
             )
             if not os.path.exists(mp3_tmp) or os.path.getsize(mp3_tmp) < 1000:
@@ -467,7 +485,7 @@ def text_to_wav_edge(text: str, wav_path: str) -> bool:
                 pass
 
             if r.returncode == 0 and os.path.exists(wav_path):
-                return True
+                return True, words
             raise ValueError(f"ffmpeg conversion échouée : {r.stderr[-100:]}")
 
         except asyncio.TimeoutError:
@@ -485,7 +503,7 @@ def text_to_wav_edge(text: str, wav_path: str) -> bool:
     except Exception:
         pass
 
-    return False
+    return False, []
 
 
 def text_to_wav_espeak(text: str, wav_path: str) -> bool:
@@ -503,24 +521,45 @@ def wav_to_mp3(wav_path: str, mp3_path: str) -> bool:
     return r.returncode == 0 and os.path.exists(mp3_path)
 
 
-def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float, str]:
+def _estimate_word_timings(text: str, total_duration: float) -> list[dict]:
+    """
+    Fallback quand on n'a pas de timing réel (espeak, ou edge-tts sans
+    WordBoundary) : répartit les mots uniformément sur la durée totale,
+    pondéré par la longueur de chaque mot (approximation raisonnable).
+    """
+    words = text.split()
+    if not words:
+        return []
+    weights = [max(len(w), 2) for w in words]
+    total_w = sum(weights)
+    timings = []
+    t = 0.0
+    for w, wt in zip(words, weights):
+        dur = total_duration * (wt / total_w)
+        timings.append({"word": w, "start": t, "end": t + dur})
+        t += dur
+    return timings
+
+
+def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float, str, list[dict]]:
     wav = str(audio_dir / f"{name}.wav")
     mp3 = str(audio_dir / f"{name}.mp3")
 
-    # Essai edge-tts
-    ok = text_to_wav_edge(text, wav)
+    # Essai edge-tts (fournit le timing réel mot par mot)
+    ok, word_timings = text_to_wav_edge(text, wav)
     engine = "edge-tts"
 
-    # Fallback espeak
+    # Fallback espeak (pas de timing réel -> estimation)
     if not ok:
         ok = text_to_wav_espeak(text, wav)
         engine = "espeak-ng (fallback)"
+        word_timings = []
 
     if not ok:
-        return None, 5.0, "échec"
+        return None, 5.0, "échec", []
 
     if not wav_to_mp3(wav, mp3):
-        return None, 5.0, "échec"
+        return None, 5.0, "échec", []
 
     try:
         os.remove(wav)
@@ -535,7 +574,10 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
     except Exception:
         dur = len(text.split()) / 2.5
 
-    return mp3, dur, engine
+    if not word_timings:
+        word_timings = _estimate_word_timings(text, dur)
+
+    return mp3, dur, engine, word_timings
 
 
 def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list[dict]:
@@ -546,17 +588,17 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
 
     # Intro
     intro_text = script_data.get("intro", "Bonjour, voici les actualités du jour.")
-    mp3, dur, engine = make_audio(intro_text, "intro", audio_dir)
+    mp3, dur, engine, words = make_audio(intro_text, "intro", audio_dir)
     engines_used.append(engine)
     segments.append({"type": "intro", "audio": mp3, "duration": dur,
-                     "text": intro_text, "titre": "Journal du Monde"})
+                     "text": intro_text, "titre": "Journal du Monde", "words": words})
     print(f"  ✅ Intro : {dur:.1f}s — moteur : {engine}")
 
     # News
     for i, item in enumerate(script_data["news"]):
         n    = i + 1
         text = f"Numéro {n}. {item['titre']}. {item['resume']}"
-        mp3, dur, engine = make_audio(text, f"news_{n:02d}", audio_dir)
+        mp3, dur, engine, words = make_audio(text, f"news_{n:02d}", audio_dir)
         engines_used.append(engine)
         segments.append({
             "type":      "news",
@@ -564,6 +606,8 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
             "audio":     mp3,
             "duration":  dur,
             "text":      item["resume"],
+            "spoken_text": text,    # texte réellement prononcé (pour aligner les sous-titres)
+            "words":     words,     # timing mot par mot (start/end en secondes)
             "titre":     item["titre"],
             "source":    item.get("source", ""),
             "categorie": item.get("categorie", "monde"),
@@ -573,10 +617,10 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
 
     # Outro
     outro_text = script_data.get("outro", "Merci et à bientôt.")
-    mp3, dur, engine = make_audio(outro_text, "outro", audio_dir)
+    mp3, dur, engine, words = make_audio(outro_text, "outro", audio_dir)
     engines_used.append(engine)
     segments.append({"type": "outro", "audio": mp3, "duration": dur,
-                     "text": outro_text, "titre": "Merci"})
+                     "text": outro_text, "titre": "Merci", "words": words})
     print(f"  ✅ Outro : {dur:.1f}s — moteur : {engine}")
 
     n_espeak = sum(1 for e in engines_used if "espeak" in e)
@@ -770,9 +814,10 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     pad  = 44
     y    = H - 420
 
-    # Titre (blanc, gras)
+    # Titre (blanc, gras) — max 2 lignes pour garder l'espace nécessaire
+    # aux sous-titres animés juste en dessous
     title_lines = _wrap(seg["titre"], fonts["bold_lg"], W - pad * 2, draw)
-    for line in title_lines[:3]:
+    for line in title_lines[:2]:
         draw.text((pad, y), line,
                   font=fonts["bold_lg"], fill=(*PALETTE["white"], 255))
         y += 70
@@ -781,22 +826,9 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     _draw_gold_line(draw, pad, y + 6, pad + 100)
     y += 28
 
-    # Résumé (gris clair) — tronqué proprement à la dernière phrase complète
-    # si le texte dépasse 4 lignes (jamais de coupure en plein milieu d'une phrase)
-    body_lines = _wrap(seg["text"], fonts["regular_md"], W - pad * 2, draw)
-    if len(body_lines) > 4:
-        shown_text = " ".join(body_lines[:4])
-        # Chercher le dernier point/!/? dans les 4 lignes affichées
-        last_punct = max(shown_text.rfind("."), shown_text.rfind("!"), shown_text.rfind("?"))
-        if last_punct >= len(shown_text) * 0.4:  # garder seulement si pas trop court
-            shown_text = shown_text[:last_punct + 1]
-        else:
-            shown_text = shown_text.rstrip() + "…"
-        body_lines = _wrap(shown_text, fonts["regular_md"], W - pad * 2, draw)
-    for line in body_lines[:4]:
-        draw.text((pad, y), line,
-                  font=fonts["regular_md"], fill=(*PALETTE["gray"], 215))
-        y += 48
+    # NOTE : le résumé n'est plus dessiné statiquement ici — il est
+    # remplacé par les sous-titres animés mot par mot (generate_subtitle_filter),
+    # appliqués en post-traitement ffmpeg avec le vrai timing vocal.
 
     # Source (doré, bas) — puce ronde vectorielle au lieu d'un emoji
     if seg.get("source"):
@@ -858,60 +890,41 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
 #  ÉTAPE 4 — ASSEMBLAGE VIDÉO (ffmpeg direct)
 # ═══════════════════════════════════════════════════════════════
 
-def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
+def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     """
-    Génère un filtre ffmpeg drawtext pour sous-titres animés mot par mot.
+    Génère un filtre ffmpeg drawtext pour sous-titres animés mot par mot,
+    calés sur le VRAI timing vocal (word_timings issus d'edge-tts WordBoundary,
+    ou estimation pondérée en fallback).
 
-    Principe :
-    - Le texte est découpé en groupes de 3 mots max (plus lisible sur mobile)
-    - Chaque groupe apparaît pendant duration/nb_groupes secondes
-    - Style : fond semi-transparent noir, texte blanc, bordure noire
-    - Position : bas de l'écran (au-dessus de la source)
+    Principe (style "pop word", le plus fiable en ffmpeg pur — pas de calcul
+    de position de sous-chaîne dans un texte plus long, qui dérive avec une
+    police non-monospace) :
+    - Une ligne de contexte (groupe de 3 mots, blanc) affichée en continu
+    - Par-dessus, le mot actuellement prononcé s'affiche en grand, doré,
+      centré, qui "pop" et change au rythme de la voix
 
-    Retourne une string filtre ffmpeg prête à injecter dans -vf.
+    `words` : liste de {"word": str, "start": float, "end": float} en secondes.
+    Retourne une string filtre ffmpeg prête à injecter dans -vf (ou "" si pas
+    de mots).
     """
-    # Découper en groupes de 3 mots
-    words  = text.split()
-    groups = []
-    for i in range(0, len(words), 3):
-        groups.append(" ".join(words[i:i+3]))
-
-    if not groups:
+    if not words:
         return ""
 
-    nb       = len(groups)
-    # Laisser 0.3s de marge (fade in/out) de chaque côté
-    margin   = 0.3
-    usable   = max(0.5, duration - 2 * margin)
-    per_grp  = usable / nb
+    GROUP_SIZE = 3
+    groups = [words[i:i + GROUP_SIZE] for i in range(0, len(words), GROUP_SIZE)]
 
-    # Position : centré horizontalement, à 200px du bas
-    x = "(w-text_w)/2"
-    y = f"{H - 220}"
-
-    # Fonte : chercher DejaVu Bold à plusieurs emplacements possibles
-    # (les runners GitHub Actions n'ont pas toujours le même chemin)
-    import os
     font_candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     ]
     font_path = next((p for p in font_candidates if os.path.exists(p)), "")
+    font_opt  = f"fontfile={font_path}:" if font_path else ""
 
-    # Si aucune police trouvée sur le disque, ne PAS injecter fontfile= du tout
-    # (sinon ffmpeg plante sur un chemin invalide et peut faire échouer tout le filtre)
-    font_opt = f"fontfile={font_path}:" if font_path else ""
-
-    filters = []
-    for idx, grp in enumerate(groups):
-        t_start = margin + idx * per_grp
-        t_end   = t_start + per_grp
-
-        # Échapper les caractères spéciaux ffmpeg
-        grp_escaped = (grp
+    def _escape(s: str) -> str:
+        return (s
             .replace("\\", "\\\\")
-            .replace("'",  "’")      # apostrophe typographique
+            .replace("'",  "’")
             .replace(":",  "\\:")
             .replace(",",  "\\,")
             .replace("[",  "\\[")
@@ -920,23 +933,36 @@ def generate_subtitle_filter(text: str, duration: float, W: int, H: int) -> str:
             .replace(")",  "\\)")
         )
 
-        # Fond semi-transparent via box
-        f = (
-            f"drawtext="
-            f"{font_opt}"
-            f"text='{grp_escaped}':"
-            f"fontsize=42:"
-            f"fontcolor=white:"
-            f"borderw=2:"
-            f"bordercolor=black:"
-            f"box=1:"
-            f"boxcolor=black@0.55:"
-            f"boxborderw=12:"
-            f"x={x}:"
-            f"y={y}:"
-            f"enable='between(t,{t_start:.3f},{t_end:.3f})'"
+    y_context = H - 150   # ligne de contexte (groupe complet, blanc)
+    y_word    = H - 215   # mot du moment, doré, juste au-dessus
+
+    filters = []
+    for grp in groups:
+        grp_start = grp[0]["start"]
+        grp_end   = grp[-1]["end"]
+        grp_text  = " ".join(w["word"] for w in grp)
+
+        # Ligne de contexte : tout le groupe en blanc, affiché pendant
+        # toute la durée du groupe
+        filters.append(
+            f"drawtext={font_opt}"
+            f"text='{_escape(grp_text)}':"
+            f"fontsize=38:fontcolor=white@0.85:borderw=2:bordercolor=black:"
+            f"box=1:boxcolor=black@0.55:boxborderw=12:"
+            f"x=(w-text_w)/2:y={y_context}:"
+            f"enable='between(t,{grp_start:.3f},{grp_end:.3f})'"
         )
-        filters.append(f)
+
+        # Mot du moment : un calque par mot, en gros et doré, centré,
+        # actif uniquement sur sa propre fenêtre de temps réelle
+        for w in grp:
+            filters.append(
+                f"drawtext={font_opt}"
+                f"text='{_escape(w['word'])}':"
+                f"fontsize=58:fontcolor=#F5C518:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y={y_word}:"
+                f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
+            )
 
     return ",".join(filters)
 
@@ -1080,6 +1106,8 @@ def build_video(segments: list[dict], photo_paths: list[str],
             "audio":    seg.get("audio"),
             "duration": dur,
             "label":    seg.get("titre", stype)[:40],
+            "type":     stype,
+            "words":    seg.get("words", []),
         })
         print(f"  🖼️  [{stype:5}] {segment_files[-1]['label']:<42} {dur:.1f}s")
 
@@ -1096,11 +1124,11 @@ def build_video(segments: list[dict], photo_paths: list[str],
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
         dur      = seg["duration"]
 
-        # ── Filtre vidéo : scale + fade + sous-titres animés ──
+        # ── Filtre vidéo : scale + fade + sous-titres animés mot par mot ──
         sub_filter = ""
-        sub_text   = seg.get("text", "") or seg.get("titre", "")
-        if sub_text and dur > 1:
-            sub_filter = generate_subtitle_filter(sub_text, dur, W, H)
+        words = seg.get("words", [])
+        if words and dur > 1:
+            sub_filter = generate_subtitle_filter(words, W, H)
 
         vf_parts = [
             f"scale={W}:{H}",
