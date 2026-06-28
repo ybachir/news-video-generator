@@ -790,8 +790,24 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     except Exception:
         photo = Image.new("RGB", (W, H), PALETTE["bg"])
 
-    # ── Overlay dégradé bas ──
+    # ── Vignette radiale légère (look plus cinématographique) ──
     img = photo.convert("RGBA")
+    vignette = Image.new("L", (W, H), 0)
+    vd = ImageDraw.Draw(vignette)
+    max_dist = ((W / 2) ** 2 + (H / 2) ** 2) ** 0.5
+    cx0, cy0 = W / 2, H * 0.42
+    # Dessiné par anneaux concentriques (rapide, pas pixel-par-pixel)
+    n_rings = 40
+    for i in range(n_rings):
+        t = i / n_rings
+        r = max_dist * (1 - t)
+        alpha = int(70 * t ** 1.6)
+        vd.ellipse([cx0 - r, cy0 - r, cx0 + r, cy0 + r], fill=alpha)
+    vignette = vignette.filter(ImageFilter.GaussianBlur(radius=40))
+    black_layer = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+    img = Image.composite(black_layer, img, vignette)
+
+    # ── Overlay dégradé bas ──
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
     grad_start = H // 3
@@ -918,11 +934,14 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     calés sur le VRAI timing vocal (word_timings issus d'edge-tts WordBoundary,
     ou estimation pondérée en fallback).
 
-    Principe (un seul système, pas deux superposés) :
-    - Le groupe de 3 mots est affiché en une seule ligne, centrée, en blanc
-    - Le mot actuellement prononcé est redessiné PAR-DESSUS, à la même
-      position exacte (mesurée via PIL, pas estimée), en doré — effet
-      karaoke classique sans dérive de police ni double ligne de texte.
+    Principe (un seul rendu par mot à chaque instant — jamais deux calques
+    superposés sur le même mot, ce qui créait un effet de "double texte"
+    visible surtout avec le zoom Ken Burns) :
+    - Chaque mot du groupe est dessiné en BLANC pendant toute la durée du
+      groupe, SAUF pendant sa propre fenêtre de prononciation où il est
+      dessiné en DORÉ à la place — jamais les deux en même temps.
+    - Position de chaque mot mesurée au pixel exact via PIL (pas d'estimation,
+      pas de dérive avec une police non-monospace).
 
     `words` : liste de {"word": str, "start": float, "end": float} en secondes.
     Retourne une string filtre ffmpeg prête à injecter dans -vf (ou "" si pas
@@ -976,26 +995,40 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
         grp_w     = _text_w(grp_text)
         grp_x0    = f"(w-{grp_w})/2"   # x du début du texte une fois centré
 
-        # Calque de base : le groupe complet en blanc, pendant toute sa durée
+        # Fond (box) commun à tout le groupe : un seul rectangle discret
+        # derrière tous les mots, affiché pendant toute la durée du groupe
         filters.append(
             f"drawtext={font_opt}"
             f"text='{_escape(grp_text)}':"
-            f"fontsize={FONT_SIZE}:fontcolor=white:borderw=3:bordercolor=black:"
+            f"fontsize={FONT_SIZE}:fontcolor=white@0:"   # texte invisible, juste la box
             f"box=1:boxcolor=black@0.55:boxborderw=14:"
             f"x={grp_x0}:y={y_sub}:"
             f"enable='between(t,{grp_start:.3f},{grp_end:.3f})'"
         )
 
-        # Mot courant redessiné en doré, à la position pixel-exacte mesurée
-        # (largeur du préfixe + espace), uniquement sur sa fenêtre de temps
+        # Chaque mot : DEUX états temporels qui s'excluent mutuellement
+        # (jamais actifs en même temps) -> aucun risque de double rendu
         prefix = ""
         for w in grp:
             offset_px = _text_w(prefix)
+            x_expr    = f"({grp_x0})+{offset_px}"
+
+            # État 1 : ce mot en BLANC, tout le temps SAUF pendant son tour
             filters.append(
                 f"drawtext={font_opt}"
                 f"text='{_escape(w['word'])}':"
-                f"fontsize={FONT_SIZE}:fontcolor=#F5C518:borderw=3:bordercolor=black:"
-                f"x=({grp_x0})+{offset_px}:y={y_sub}:"
+                f"fontsize={FONT_SIZE}:fontcolor=white:borderw=3:bordercolor=black:"
+                f"x={x_expr}:y={y_sub}:"
+                f"enable='between(t,{grp_start:.3f},{w['start']:.3f})+between(t,{w['end']:.3f},{grp_end:.3f})'"
+            )
+            # État 2 : ce mot en DORÉ avec léger glow (contour plus épais),
+            # UNIQUEMENT pendant son tour — effet "pop" sans changer la
+            # taille de police (qui casserait l'alignement pixel-exact)
+            filters.append(
+                f"drawtext={font_opt}"
+                f"text='{_escape(w['word'])}':"
+                f"fontsize={FONT_SIZE}:fontcolor=#F5C518:borderw=5:bordercolor=#3a2c00:"
+                f"x={x_expr}:y={y_sub}:"
                 f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
             )
             prefix += w["word"] + " "
