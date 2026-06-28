@@ -153,7 +153,7 @@ Voici {len(articles)} articles RSS bruts :
 {articles_txt}
 
 Sélectionne les {n} actualités les plus importantes et variées.
-Réécris chaque résumé en style journaliste TV (2-3 phrases, 50-70 mots, factuel, dynamique).
+Réécris chaque résumé en style journaliste TV (2-3 phrases, 40-55 mots, factuel, dynamique, concis).
 
 Pour keywords_photo : choisis des mots-clés VISUELS et GÉNÉRIQUES adaptés à une
 recherche sur banque d'images (ex: "stadium", "courtroom", "hospital", "protest",
@@ -166,7 +166,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
-      "resume": "Résumé journaliste TV 50-70 mots",
+      "resume": "Résumé journaliste TV 40-55 mots",
       "source": "Nom du média",
       "categorie": "politique|economie|science|technologie|sport|culture|environnement|societe|monde",
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
@@ -1123,15 +1123,33 @@ def build_video(segments: list[dict], photo_paths: list[str],
     for i, seg in enumerate(segment_files):
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
         dur      = seg["duration"]
+        fps      = config["FPS"]
 
-        # ── Filtre vidéo : scale + fade + sous-titres animés mot par mot ──
+        # ── Filtre vidéo : scale + Ken Burns + fade + sous-titres animés ──
         sub_filter = ""
         words = seg.get("words", [])
         if words and dur > 1:
             sub_filter = generate_subtitle_filter(words, W, H)
 
-        vf_parts = [
-            f"scale={W}:{H}",
+        vf_parts = [f"scale={W}:{H}"]
+
+        # Ken Burns (zoom lent) uniquement sur les news, pas intro/outro
+        # (qui sont des cartes/logos, pas des photos) : casse l'effet figé
+        # d'une image statique pendant 10-15s, donne l'impression de
+        # plusieurs plans sans avoir besoin de plusieurs photos.
+        # Alterné zoom in / zoom out selon l'index pour varier le rythme.
+        if seg.get("type") == "news" and dur > 1.5:
+            n_frames  = max(1, int(dur * fps))
+            zoom_rate = min(0.10, 0.9 / n_frames)   # zoom total borné à ~+10%
+            if i % 2 == 0:
+                # Zoom in : part de 1.0, grossit doucement
+                zoom_expr = f"zoompan=z='min(zoom+{zoom_rate:.5f},1.10)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={fps}"
+            else:
+                # Zoom out : part déjà zoomé, revient doucement vers 1.0
+                zoom_expr = f"zoompan=z='if(eq(on,0),1.10,max(zoom-{zoom_rate:.5f},1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={fps}"
+            vf_parts.append(zoom_expr)
+
+        vf_parts += [
             f"fade=t=in:st=0:d={FADE_D}:color=black",
             f"fade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}:color=black",
         ]
