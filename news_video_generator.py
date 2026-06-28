@@ -964,6 +964,25 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
 #  ÉTAPE 4 — ASSEMBLAGE VIDÉO (ffmpeg direct)
 # ═══════════════════════════════════════════════════════════════
 
+def _sanitize_word_timings(words: list[dict]) -> list[dict]:
+    """
+    Nettoie les timings de mots avant génération du filtre ffmpeg :
+    - garantit start < end pour chaque mot (sinon les expressions
+      between() peuvent devenir incohérentes et produire un rendu
+      avec un calque dans un état indéterminé)
+    - garantit qu'un mot ne commence jamais avant la fin du mot précédent
+      (chevauchements possibles avec les imprécisions d'edge-tts)
+    """
+    clean = []
+    prev_end = 0.0
+    for w in words:
+        start = max(w["start"], prev_end)
+        end   = max(w["end"], start + 0.05)   # durée minimale de 50ms
+        clean.append({"word": w["word"], "start": start, "end": end})
+        prev_end = end
+    return clean
+
+
 def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     """
     Génère un filtre ffmpeg drawtext pour sous-titres animés mot par mot,
@@ -978,6 +997,8 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
       dessiné en DORÉ à la place — jamais les deux en même temps.
     - Position de chaque mot mesurée au pixel exact via PIL (pas d'estimation,
       pas de dérive avec une police non-monospace).
+    - Timings validés/nettoyés en amont (voir _sanitize_word_timings) pour
+      éviter tout état incohérent en cas de chevauchement entre mots.
 
     `words` : liste de {"word": str, "start": float, "end": float} en secondes.
     Retourne une string filtre ffmpeg prête à injecter dans -vf (ou "" si pas
@@ -985,6 +1006,8 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     """
     if not words:
         return ""
+
+    words = _sanitize_word_timings(words)
 
     GROUP_SIZE = 3
     groups = [words[i:i + GROUP_SIZE] for i in range(0, len(words), GROUP_SIZE)]
@@ -1064,7 +1087,7 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
             filters.append(
                 f"drawtext={font_opt}"
                 f"text='{_escape(w['word'])}':"
-                f"fontsize={FONT_SIZE}:fontcolor=#F5C518@0:borderw=8:bordercolor=#F5C518@0.45:"
+                f"fontsize={FONT_SIZE}:fontcolor=#F5C518@0:borderw=6:bordercolor=#F5C518@0.35:"
                 f"x={x_expr}:y={y_sub}:"
                 f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
             )
