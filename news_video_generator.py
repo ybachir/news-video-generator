@@ -66,19 +66,21 @@ CATEGORY_COLORS = {
     "monde":         (35,  35, 100),
 }
 
-# Traduction FR -> EN pour le repli Unsplash (les requêtes en anglais
-# renvoient nettement plus de résultats que les catégories françaises)
+# Mots-clés de secours par catégorie pour le repli Unsplash — choisis
+# volontairement NEUTRES et SÛRS (lieux, objets, architecture symbolique)
+# pour éviter les photos de manifestations, conflits armés ou contenu
+# sensible quand les mots-clés générés par Groq ne donnent rien de pertinent.
 CATEGORY_EN = {
-    "politique":     "politics",
-    "economie":      "economy business",
-    "technologie":   "technology",
-    "science":       "science",
-    "sport":         "sport stadium",
-    "environnement": "nature environment",
-    "sante":         "health hospital",
-    "culture":       "culture art",
-    "societe":       "city people",
-    "monde":         "world news",
+    "politique":     "government building architecture",
+    "economie":      "stock market office building",
+    "technologie":   "computer technology office",
+    "science":       "laboratory research microscope",
+    "sport":         "stadium sports arena",
+    "environnement": "nature landscape forest",
+    "sante":         "hospital medical equipment",
+    "culture":       "museum art gallery",
+    "societe":       "city street architecture",
+    "monde":         "world map globe",
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -274,7 +276,7 @@ def _unsplash_search(query: str, api_key: str, path: str) -> tuple[bool, int, st
     try:
         r = requests.get(
             "https://api.unsplash.com/photos/random",
-            params={"query": query, "orientation": "portrait"},
+            params={"query": query, "orientation": "portrait", "content_filter": "high"},
             headers={"Authorization": f"Client-ID {api_key}"},
             timeout=12
         )
@@ -291,11 +293,32 @@ def _unsplash_search(query: str, api_key: str, path: str) -> tuple[bool, int, st
         return False, 0, f"{type(e).__name__}: {e}"
 
 
+# Termes à exclure des mots-clés avant recherche Unsplash : même générés
+# par Groq pour un sujet neutre (ex: "paix", "accord"), certains mots-clés
+# adjacents renvoient des photos de conflit/violence/manifestation sur
+# Unsplash (banque d'images généraliste, pas de tri éditorial). On préfère
+# rater une photo pertinente plutôt que risquer une image choquante ou
+# hors-sujet sur un registre sensible.
+SENSITIVE_TERMS = {
+    "war", "conflict", "soldier", "soldiers", "military", "army", "weapon",
+    "gun", "protest", "protester", "protesters", "riot", "violence",
+    "attack", "bomb", "terrorism", "refugee", "crisis", "death", "dead",
+    "victim", "victims", "blood", "fight", "battle", "demonstration",
+}
+
+
+def _filter_sensitive_keywords(keywords: list[str]) -> list[str]:
+    """Retire les mots-clés correspondant à des termes sensibles."""
+    return [k for k in keywords if k.lower().strip() not in SENSITIVE_TERMS]
+
+
 def download_unsplash_photo(keywords: list[str], api_key: str, path: str,
                              category: str | None = None) -> bool:
     if not api_key:
         print("  ⚠️  Unsplash : UNSPLASH_KEY absente/vide — fond généré utilisé")
         return False
+
+    keywords = _filter_sensitive_keywords(keywords)
 
     # Stratégie en cascade : la requête complète est souvent trop spécifique
     # (ex: "senegal iraq world cup football" -> 404 No photos found, car
