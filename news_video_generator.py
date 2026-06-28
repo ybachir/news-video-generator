@@ -849,13 +849,13 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     pad  = 44
     y    = H - 420
 
-    # Titre (blanc, gras, avec ombre portée pour mieux se détacher de la
-    # photo) — max 2 lignes pour garder l'espace nécessaire aux sous-titres
-    # animés juste en dessous
+    # Titre (blanc, gras, avec ombre portée bien visible pour mieux se
+    # détacher de la photo) — max 2 lignes pour garder l'espace nécessaire
+    # aux sous-titres animés juste en dessous
     title_lines = _wrap(seg["titre"], fonts["bold_lg"], W - pad * 2, draw)
     for line in title_lines[:2]:
-        draw.text((pad + 3, y + 3), line,
-                  font=fonts["bold_lg"], fill=(0, 0, 0, 130))   # ombre
+        draw.text((pad + 5, y + 5), line,
+                  font=fonts["bold_lg"], fill=(0, 0, 0, 190))   # ombre
         draw.text((pad, y), line,
                   font=fonts["bold_lg"], fill=(*PALETTE["white"], 255))
         y += 70
@@ -1021,13 +1021,25 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
                 f"x={x_expr}:y={y_sub}:"
                 f"enable='between(t,{grp_start:.3f},{w['start']:.3f})+between(t,{w['end']:.3f},{grp_end:.3f})'"
             )
-            # État 2 : ce mot en DORÉ avec léger glow (contour plus épais),
-            # UNIQUEMENT pendant son tour — effet "pop" sans changer la
-            # taille de police (qui casserait l'alignement pixel-exact)
+            # Glow doré (calque séparé, contour très épais et semi-transparent,
+            # dessiné EN DESSOUS du mot net) — donne un effet "pop" lumineux
+            # sans jamais toucher au texte net qui garde un borderw identique
+            # partout (alignement vertical stable)
             filters.append(
                 f"drawtext={font_opt}"
                 f"text='{_escape(w['word'])}':"
-                f"fontsize={FONT_SIZE}:fontcolor=#F5C518:borderw=5:bordercolor=#3a2c00:"
+                f"fontsize={FONT_SIZE}:fontcolor=#F5C518@0:borderw=8:bordercolor=#F5C518@0.45:"
+                f"x={x_expr}:y={y_sub}:"
+                f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
+            )
+            # État 2 : ce mot en DORÉ net, UNIQUEMENT pendant son tour — même
+            # borderw que l'état blanc (sinon la bounding box du texte change
+            # de taille selon l'épaisseur du contour, ce qui décale verticalement
+            # le texte d'un mot à l'autre -> effet "pas sur la même ligne")
+            filters.append(
+                f"drawtext={font_opt}"
+                f"text='{_escape(w['word'])}':"
+                f"fontsize={FONT_SIZE}:fontcolor=#F5C518:borderw=3:bordercolor=#3a2c00:"
                 f"x={x_expr}:y={y_sub}:"
                 f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
             )
