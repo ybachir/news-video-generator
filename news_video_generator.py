@@ -66,6 +66,22 @@ CATEGORY_COLORS = {
     "monde":         (35,  35, 100),
 }
 
+# Couleurs d'accent vives par catégorie, pour les badges UI (distinctes des
+# couleurs sombres ci-dessus qui servent de fonds) — donne plus de vie et
+# de hiérarchie visuelle au tag catégorie tout en restant lisible sur fond sombre
+CATEGORY_ACCENT = {
+    "politique":     (90, 140, 245),
+    "economie":      (60, 200, 130),
+    "technologie":   (70, 170, 245),
+    "science":       (180, 110, 245),
+    "sport":         (245, 140, 60),
+    "environnement": (80, 210, 120),
+    "sante":         (245, 90, 160),
+    "culture":       (245, 175, 60),
+    "societe":       (160, 160, 210),
+    "monde":         (110, 130, 245),
+}
+
 # Mots-clés de secours par catégorie pour le repli Unsplash — choisis
 # volontairement NEUTRES et SÛRS (lieux, objets, architecture symbolique)
 # pour éviter les photos de manifestations, conflits armés ou contenu
@@ -792,32 +808,38 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     draw.text((W // 2, 30), now,
               font=fonts["regular_xs"], fill=(*PALETTE["gray"], 180), anchor="mm")
 
-    # ── Badge numéro (cercle doré) ──
+    # ── Badge numéro (cercle doré avec ombre portée, plus de profondeur) ──
     n  = seg["index"]
     cx, cy, r = 76, 100, 54
+    draw.ellipse([cx - r + 4, cy - r + 4, cx + r + 4, cy + r + 4], fill=(0, 0, 0, 90))
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*PALETTE["gold"], 240))
     draw.text((cx, cy), str(n),
               font=fonts["bold_lg"], fill=(*PALETTE["bg"], 255), anchor="mm")
 
-    # ── Tag catégorie (texte seul — pas d'icône emoji, plus fiable visuellement) ──
-    cat     = seg.get("categorie", "monde")
-    cat_tag = cat.upper()
+    # ── Tag catégorie (couleur d'accent par catégorie, plus vivant) ──
+    cat        = seg.get("categorie", "monde")
+    cat_tag    = cat.upper()
+    cat_accent = CATEGORY_ACCENT.get(cat, PALETTE["gold"])
     bb      = draw.textbbox((0, 0), cat_tag, font=fonts["regular_sm"])
     tag_w   = bb[2] - bb[0] + 28
     tag_x   = W - tag_w - 20
     draw.rounded_rectangle([tag_x, 18, W - 20, 58],
-                            radius=8, fill=(*PALETTE["bg2"], 210))
+                            radius=8, fill=(*PALETTE["bg2"], 225),
+                            outline=(*cat_accent, 200), width=2)
     draw.text((tag_x + tag_w // 2, 38), cat_tag,
-              font=fonts["regular_sm"], fill=(*PALETTE["gold"], 230), anchor="mm")
+              font=fonts["regular_sm"], fill=(*cat_accent, 255), anchor="mm")
 
     # ── Zone texte bas ──
     pad  = 44
     y    = H - 420
 
-    # Titre (blanc, gras) — max 2 lignes pour garder l'espace nécessaire
-    # aux sous-titres animés juste en dessous
+    # Titre (blanc, gras, avec ombre portée pour mieux se détacher de la
+    # photo) — max 2 lignes pour garder l'espace nécessaire aux sous-titres
+    # animés juste en dessous
     title_lines = _wrap(seg["titre"], fonts["bold_lg"], W - pad * 2, draw)
     for line in title_lines[:2]:
+        draw.text((pad + 3, y + 3), line,
+                  font=fonts["bold_lg"], fill=(0, 0, 0, 130))   # ombre
         draw.text((pad, y), line,
                   font=fonts["bold_lg"], fill=(*PALETTE["white"], 255))
         y += 70
@@ -896,12 +918,11 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     calés sur le VRAI timing vocal (word_timings issus d'edge-tts WordBoundary,
     ou estimation pondérée en fallback).
 
-    Principe (style "pop word", le plus fiable en ffmpeg pur — pas de calcul
-    de position de sous-chaîne dans un texte plus long, qui dérive avec une
-    police non-monospace) :
-    - Une ligne de contexte (groupe de 3 mots, blanc) affichée en continu
-    - Par-dessus, le mot actuellement prononcé s'affiche en grand, doré,
-      centré, qui "pop" et change au rythme de la voix
+    Principe (un seul système, pas deux superposés) :
+    - Le groupe de 3 mots est affiché en une seule ligne, centrée, en blanc
+    - Le mot actuellement prononcé est redessiné PAR-DESSUS, à la même
+      position exacte (mesurée via PIL, pas estimée), en doré — effet
+      karaoke classique sans dérive de police ni double ligne de texte.
 
     `words` : liste de {"word": str, "start": float, "end": float} en secondes.
     Retourne une string filtre ffmpeg prête à injecter dans -vf (ou "" si pas
@@ -921,6 +942,18 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
     font_path = next((p for p in font_candidates if os.path.exists(p)), "")
     font_opt  = f"fontfile={font_path}:" if font_path else ""
 
+    FONT_SIZE = 50
+    try:
+        pil_font = ImageFont.truetype(font_path, FONT_SIZE) if font_path else ImageFont.load_default()
+    except Exception:
+        pil_font = ImageFont.load_default()
+    _measure_img  = Image.new("RGB", (10, 10))
+    _measure_draw = ImageDraw.Draw(_measure_img)
+
+    def _text_w(s: str) -> int:
+        bb = _measure_draw.textbbox((0, 0), s, font=pil_font)
+        return bb[2] - bb[0]
+
     def _escape(s: str) -> str:
         return (s
             .replace("\\", "\\\\")
@@ -933,36 +966,39 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
             .replace(")",  "\\)")
         )
 
-    y_context = H - 150   # ligne de contexte (groupe complet, blanc)
-    y_word    = H - 215   # mot du moment, doré, juste au-dessus
+    y_sub = H - 195   # bande unique des sous-titres, juste au-dessus de la source
 
     filters = []
     for grp in groups:
         grp_start = grp[0]["start"]
         grp_end   = grp[-1]["end"]
         grp_text  = " ".join(w["word"] for w in grp)
+        grp_w     = _text_w(grp_text)
+        grp_x0    = f"(w-{grp_w})/2"   # x du début du texte une fois centré
 
-        # Ligne de contexte : tout le groupe en blanc, affiché pendant
-        # toute la durée du groupe
+        # Calque de base : le groupe complet en blanc, pendant toute sa durée
         filters.append(
             f"drawtext={font_opt}"
             f"text='{_escape(grp_text)}':"
-            f"fontsize=38:fontcolor=white@0.85:borderw=2:bordercolor=black:"
-            f"box=1:boxcolor=black@0.55:boxborderw=12:"
-            f"x=(w-text_w)/2:y={y_context}:"
+            f"fontsize={FONT_SIZE}:fontcolor=white:borderw=3:bordercolor=black:"
+            f"box=1:boxcolor=black@0.55:boxborderw=14:"
+            f"x={grp_x0}:y={y_sub}:"
             f"enable='between(t,{grp_start:.3f},{grp_end:.3f})'"
         )
 
-        # Mot du moment : un calque par mot, en gros et doré, centré,
-        # actif uniquement sur sa propre fenêtre de temps réelle
+        # Mot courant redessiné en doré, à la position pixel-exacte mesurée
+        # (largeur du préfixe + espace), uniquement sur sa fenêtre de temps
+        prefix = ""
         for w in grp:
+            offset_px = _text_w(prefix)
             filters.append(
                 f"drawtext={font_opt}"
                 f"text='{_escape(w['word'])}':"
-                f"fontsize=58:fontcolor=#F5C518:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y={y_word}:"
+                f"fontsize={FONT_SIZE}:fontcolor=#F5C518:borderw=3:bordercolor=black:"
+                f"x=({grp_x0})+{offset_px}:y={y_sub}:"
                 f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
             )
+            prefix += w["word"] + " "
 
     return ",".join(filters)
 
