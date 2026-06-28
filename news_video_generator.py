@@ -21,6 +21,23 @@ import requests
 import feedparser
 from pathlib import Path
 from datetime import datetime
+
+# Formatage de date en français, indépendant de la locale système (le runner
+# GitHub Actions n'a pas forcément la locale fr_FR installée, ce qui fait
+# afficher les jours/mois en anglais avec strftime("%A")/("%B") classique)
+_JOURS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+_MOIS_FR  = ["janvier", "février", "mars", "avril", "mai", "juin",
+             "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def date_fr(dt: datetime, with_weekday: bool = True) -> str:
+    """Formate une date en français ('vendredi 26 juin 2026'), sans dépendre
+    de la locale système."""
+    jour = _JOURS_FR[dt.weekday()]
+    mois = _MOIS_FR[dt.month - 1]
+    if with_weekday:
+        return f"{jour} {dt.day} {mois} {dt.year}"
+    return f"{dt.day} {mois} {dt.year}"
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 import numpy as np
 
@@ -157,7 +174,7 @@ def structure_with_groq(articles: list[dict], api_key: str, n: int) -> dict | No
     if not api_key:
         return None
 
-    today = datetime.now().strftime("%d %B %Y")
+    today = date_fr(datetime.now(), with_weekday=False)
     articles_txt = "\n".join(
         f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:150]}"
         for i, a in enumerate(articles)
@@ -255,7 +272,7 @@ def get_news(config: dict) -> dict:
                 "categorie":      "monde",
                 "keywords_photo": words or ["world", "news"],
             })
-        date_str = datetime.now().strftime("%A %d %B %Y")
+        date_str = date_fr(datetime.now())
         return {
             "news":  news,
             "intro": f"Bonjour, voici les {len(news)} actualités du {date_str}.",
@@ -278,7 +295,7 @@ def _demo_news(n: int) -> dict:
     news = [{"titre": t[0], "resume": t[1], "source": t[2], "categorie": t[3], "keywords_photo": t[4]} for t in topics[:n]]
     return {
         "news":  news,
-        "intro": f"Bienvenue dans votre journal du {datetime.now().strftime('%d %B %Y')}.",
+        "intro": f"Bienvenue dans votre journal du {date_fr(datetime.now(), with_weekday=False)}.",
         "outro": "Merci de votre fidélité. À demain.",
     }
 
@@ -733,13 +750,22 @@ def render_intro(text: str, fonts: dict) -> np.ndarray:
     draw.rectangle([0, 0,    W, 6],  fill=(*PALETTE["gold"], 255))
     draw.rectangle([0, H-6,  W, H],  fill=(*PALETTE["gold"], 255))
 
-    # Carte centrale
+    # ── Glow doré diffus derrière la carte (remplace la bordure nette,
+    # look plus organique/premium que des rectangles à bords francs) ──
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(glow)
+    cx, cy = W // 2, H // 2
+    gd.ellipse([cx - 380, cy - 320, cx + 380, cy + 320], fill=(*PALETTE["gold"], 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=60))
+    img  = Image.alpha_composite(img, glow)
+    draw = ImageDraw.Draw(img)
+
+    # Carte centrale — fond plein, sans bordure nette (le glow ci-dessus
+    # fait le travail de mise en valeur)
     pad = 70
     cy1, cy2 = H // 2 - 280, H // 2 + 280
     draw.rounded_rectangle([pad, cy1, W - pad, cy2],
-                            radius=20, fill=(*PALETTE["bg2"], 230))
-    # Bordure gauche dorée
-    draw.rectangle([pad, cy1, pad + 5, cy2], fill=(*PALETTE["gold"], 255))
+                            radius=28, fill=(*PALETTE["bg2"], 235))
 
     # Icône "journal" dessinée en vectoriel (évite les glyphes emoji manquants)
     _draw_newspaper_icon(draw, W // 2, H // 2 - 190, size=70)
@@ -756,7 +782,7 @@ def render_intro(text: str, fonts: dict) -> np.ndarray:
     _draw_gold_line(draw, W // 2 - 80, H // 2 + 95, W // 2 + 80)
 
     # Date
-    date_str = datetime.now().strftime("%A %d %B %Y").upper()
+    date_str = date_fr(datetime.now()).upper()
     draw.text((W // 2, H // 2 + 135), date_str,
               font=fonts["regular_sm"], fill=(*PALETTE["gray"], 200), anchor="mm")
 
@@ -832,18 +858,21 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     draw.text((cx, cy), str(n),
               font=fonts["bold_lg"], fill=(*PALETTE["bg"], 255), anchor="mm")
 
-    # ── Tag catégorie (couleur d'accent par catégorie, plus vivant) ──
+    # ── Tag catégorie (pilule douce + puce ronde colorée, pas de
+    # rectangle à bordure nette — cohérent avec le style plus organique) ──
     cat        = seg.get("categorie", "monde")
     cat_tag    = cat.upper()
     cat_accent = CATEGORY_ACCENT.get(cat, PALETTE["gold"])
     bb      = draw.textbbox((0, 0), cat_tag, font=fonts["regular_sm"])
-    tag_w   = bb[2] - bb[0] + 28
+    tag_text_w = bb[2] - bb[0]
+    tag_w   = tag_text_w + 50   # +50 pour la puce ronde + espacements
     tag_x   = W - tag_w - 20
     draw.rounded_rectangle([tag_x, 18, W - 20, 58],
-                            radius=8, fill=(*PALETTE["bg2"], 225),
-                            outline=(*cat_accent, 200), width=2)
-    draw.text((tag_x + tag_w // 2, 38), cat_tag,
-              font=fonts["regular_sm"], fill=(*cat_accent, 255), anchor="mm")
+                            radius=20, fill=(*PALETTE["bg2"], 225))
+    dot_cx = tag_x + 22
+    draw.ellipse([dot_cx - 6, 38 - 6, dot_cx + 6, 38 + 6], fill=(*cat_accent, 255))
+    draw.text((tag_x + 40, 38), cat_tag,
+              font=fonts["regular_sm"], fill=(*cat_accent, 255), anchor="lm")
 
     # ── Zone texte bas ──
     pad  = 44
@@ -897,11 +926,18 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
     draw.rectangle([0, 0,   W, 6],  fill=(*PALETTE["gold"], 255))
     draw.rectangle([0, H-6, W, H],  fill=(*PALETTE["gold"], 255))
 
+    # ── Glow doré diffus (cohérent avec l'intro) ──
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(glow)
+    cx, cy = W // 2, H // 2
+    gd.ellipse([cx - 360, cy - 300, cx + 360, cy + 300], fill=(*PALETTE["gold"], 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=60))
+    img  = Image.alpha_composite(img, glow)
+    draw = ImageDraw.Draw(img)
+
     pad = 70
     draw.rounded_rectangle([pad, H // 2 - 260, W - pad, H // 2 + 260],
-                            radius=20, fill=(*PALETTE["bg2"], 220))
-    draw.rectangle([pad, H // 2 - 260, pad + 5, H // 2 + 260],
-                   fill=(*PALETTE["gold"], 255))
+                            radius=28, fill=(*PALETTE["bg2"], 230))
 
     _draw_newspaper_icon(draw, W // 2, H // 2 - 170, size=62)
     draw.text((W // 2, H // 2 - 60), "JOURNAL DU MONDE",
