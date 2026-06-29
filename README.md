@@ -25,7 +25,7 @@ Style **premium sombre/doré** — optimisé pour le taux de clic sur Reels/TikT
 | Accent | `#F5C518` (or vif) |
 | Texte | Blanc / Gris clair |
 | Format | 1080×1920 (9:16) |
-| Durée | ~3 min (5 news) |
+| Durée | ~60-80s (5 news, calibré pour la rétention Shorts) |
 | Structure | Intro → 5 News → Outro |
 
 ---
@@ -49,7 +49,8 @@ cp .env.example .env
 # Édite .env avec tes clés
 
 # 5. Lancer !
-python3 news_video_generator.py
+python3 -m news_video_generator
+# (ou via le point d'entrée du workflow CI : python3 run_pipeline.py)
 ```
 
 ---
@@ -83,8 +84,34 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 
 ### Étape 4 — Assemblage vidéo
 - Rendu des frames PNG via **Pillow**
+- Effet **Ken Burns** (zoom lent alterné) sur les photos pour casser l'effet figé
+- **Sous-titres animés mot par mot** (style karaoke) calés sur le vrai timing vocal capturé via edge-tts
 - Encodage H.264 et assemblage via **ffmpeg direct** (3× plus rapide que MoviePy)
 - Export MP4 optimisé pour mobile (`+faststart`)
+
+---
+
+## 📂 Structure du projet
+
+Le cœur du pipeline est organisé en package Python, un module par étape :
+
+```
+news_video_generator/
+├── __init__.py     # réexporte l'API publique + point d'entrée main()
+├── __main__.py     # permet `python3 -m news_video_generator`
+├── config.py       # constantes, palette de couleurs, config pipeline
+├── news.py         # ÉTAPE 1 — collecte RSS + structuration Groq
+├── photos.py       # ÉTAPE 2 — Unsplash (avec cascade de secours) + fonds générés
+├── audio.py        # ÉTAPE 3 — synthèse vocale edge-tts / espeak
+├── render.py       # ÉTAPE 4a — rendu visuel PIL (intro/news/outro)
+├── subtitles.py    # ÉTAPE 4b — filtre ffmpeg pour les sous-titres karaoke
+└── video.py        # ÉTAPE 4c/5 — montage ffmpeg, musique, validation MP4
+```
+
+`import news_video_generator as m` expose toute l'API du pipeline (`m.get_news`,
+`m.build_video`, `m.CONFIG`...) exactement comme avec l'ancien fichier unique —
+`run_pipeline.py` et `test_pipeline.py` n'ont pas eu besoin d'être modifiés
+lors du découpage.
 
 ---
 
@@ -105,13 +132,16 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 ## 🗺️ Roadmap
 
 - [x] ✅ Collecte news via RSS + Groq (Llama 3.3 gratuit)
-- [x] ✅ Template vidéo premium sombre/doré
+- [x] ✅ Template vidéo premium sombre/doré, badges colorés par catégorie
 - [x] ✅ TTS edge-tts (Microsoft Neural) + retry x3 + timeout
-- [x] ✅ Encodage ffmpeg direct (rapide)
+- [x] ✅ Encodage ffmpeg direct (rapide), 1080×1920 30fps yuv420p
 - [x] ✅ Validation MP4 (ffprobe) + nettoyage automatique
 - [x] ✅ Transitions fondu noir 0.3s entre les segments
-- [x] ✅ Sous-titres animés mot par mot (ffmpeg drawtext)
-- [x] ✅ Musique de fond ambient (mix -23dB, boucle, fade out)
+- [x] ✅ Sous-titres animés mot par mot, style karaoke, calés sur le vrai timing vocal edge-tts (WordBoundary)
+- [x] ✅ Effet Ken Burns (zoom lent alterné) sur les photos
+- [x] ✅ Musique de fond ambient (mix -18dB, boucle, fade out)
+- [x] ✅ Cascade de secours Unsplash + filtre de mots-clés sensibles (évite les photos hors-sujet/choquantes)
+- [x] ✅ Code organisé en package modulaire (un fichier par étape du pipeline)
 - [x] ✅ GitHub Actions workflow (cron 7h UTC, publication automatique)
 - [x] ✅ Publication YouTube (Data API v3)
 - [x] ✅ Publication Instagram Reels (Meta Graph API)
