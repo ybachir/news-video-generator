@@ -1054,47 +1054,26 @@ def generate_subtitle_filter(words: list[dict], W: int, H: int) -> str:
         grp_w     = _text_w(grp_text)
         grp_x0    = f"(w-{grp_w})/2"   # x du début du texte une fois centré
 
-        # Fond (box) commun à tout le groupe : un seul rectangle discret
-        # derrière tous les mots, affiché pendant toute la durée du groupe
+        # Calque de base : le groupe ENTIER en blanc, affiché pendant toute
+        # la durée du groupe (un seul calque, pas un par mot — réduit
+        # fortement le nombre total de filtres chaînés, ce qui semble avoir
+        # posé problème sur certains runs avec de longs textes)
         filters.append(
             f"drawtext={font_opt}"
             f"text='{_escape(grp_text)}':"
-            f"fontsize={FONT_SIZE}:fontcolor=white@0:"   # texte invisible, juste la box
+            f"fontsize={FONT_SIZE}:fontcolor=white:borderw=3:bordercolor=black:"
             f"box=1:boxcolor=black@0.55:boxborderw=14:"
             f"x={grp_x0}:y={y_sub}:"
             f"enable='between(t,{grp_start:.3f},{grp_end:.3f})'"
         )
 
-        # Chaque mot : DEUX états temporels qui s'excluent mutuellement
-        # (jamais actifs en même temps) -> aucun risque de double rendu
+        # Mot actif : redessiné en doré PAR-DESSUS, au même borderw exact
+        # que le calque blanc (sinon la bounding box change de taille selon
+        # l'épaisseur du contour, ce qui décale verticalement le texte)
         prefix = ""
         for w in grp:
             offset_px = _text_w(prefix)
             x_expr    = f"({grp_x0})+{offset_px}"
-
-            # État 1 : ce mot en BLANC, tout le temps SAUF pendant son tour
-            filters.append(
-                f"drawtext={font_opt}"
-                f"text='{_escape(w['word'])}':"
-                f"fontsize={FONT_SIZE}:fontcolor=white:borderw=3:bordercolor=black:"
-                f"x={x_expr}:y={y_sub}:"
-                f"enable='between(t,{grp_start:.3f},{w['start']:.3f})+between(t,{w['end']:.3f},{grp_end:.3f})'"
-            )
-            # Glow doré (calque séparé, contour très épais et semi-transparent,
-            # dessiné EN DESSOUS du mot net) — donne un effet "pop" lumineux
-            # sans jamais toucher au texte net qui garde un borderw identique
-            # partout (alignement vertical stable)
-            filters.append(
-                f"drawtext={font_opt}"
-                f"text='{_escape(w['word'])}':"
-                f"fontsize={FONT_SIZE}:fontcolor=#F5C518@0:borderw=6:bordercolor=#F5C518@0.35:"
-                f"x={x_expr}:y={y_sub}:"
-                f"enable='between(t,{w['start']:.3f},{w['end']:.3f})'"
-            )
-            # État 2 : ce mot en DORÉ net, UNIQUEMENT pendant son tour — même
-            # borderw que l'état blanc (sinon la bounding box du texte change
-            # de taille selon l'épaisseur du contour, ce qui décale verticalement
-            # le texte d'un mot à l'autre -> effet "pas sur la même ligne")
             filters.append(
                 f"drawtext={font_opt}"
                 f"text='{_escape(w['word'])}':"
