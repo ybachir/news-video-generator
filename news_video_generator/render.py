@@ -153,8 +153,12 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
             nh = int(pw / ratio)
             photo = photo.crop([0, (ph - nh) // 2, pw, (ph - nh) // 2 + nh])
         photo = photo.resize((W, H), Image.LANCZOS)
-        photo = ImageEnhance.Brightness(photo).enhance(0.30)
-        photo = photo.filter(ImageFilter.GaussianBlur(radius=3))
+        # Luminosité 0.50 (au lieu de 0.30 : les photos ressortaient
+        # beaucoup trop sombres par rapport aux sous-titres). Le dégradé
+        # noir du bas + la boîte des sous-titres suffisent à garantir la
+        # lisibilité du texte sans écraser toute la photo.
+        photo = ImageEnhance.Brightness(photo).enhance(0.50)
+        photo = photo.filter(ImageFilter.GaussianBlur(radius=2))
     except Exception:
         photo = Image.new("RGB", (W, H), PALETTE["bg"])
 
@@ -169,7 +173,7 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     for i in range(n_rings):
         t = i / n_rings
         r = max_dist * (1 - t)
-        alpha = int(70 * t ** 1.6)
+        alpha = int(45 * t ** 1.6)   # vignette allégée (70 → 45) : garde le look ciné sans plomber les bords
         vd.ellipse([cx0 - r, cy0 - r, cx0 + r, cy0 + r], fill=alpha)
     vignette = vignette.filter(ImageFilter.GaussianBlur(radius=40))
     black_layer = Image.new("RGBA", (W, H), (0, 0, 0, 255))
@@ -178,7 +182,10 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     # ── Overlay dégradé bas ──
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
-    grad_start = H // 3
+    # Dégradé démarré à 45% de la hauteur (au lieu de 33%) : la zone
+    # texte du bas reste aussi protégée qu'avant, mais le milieu de la
+    # photo n'est plus mangé par le voile noir.
+    grad_start = int(H * 0.45)
     for y in range(grad_start, H):
         t     = (y - grad_start) / (H - grad_start)
         alpha = int(245 * (t ** 0.5))
