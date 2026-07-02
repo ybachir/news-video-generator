@@ -17,7 +17,7 @@ from PIL import Image
 
 from .config import W, H
 from .render import render_intro, render_outro, render_news_frame, _fonts
-from .subtitles import generate_subtitle_filter
+from .subtitles import build_ass
 
 
 def get_music_path(output_dir: Path) -> str | None:
@@ -188,11 +188,11 @@ def build_video(segments: list[dict], photo_paths: list[str],
         dur      = seg["duration"]
         fps      = config["FPS"]
 
-        # ── Filtre vidéo : scale + Ken Burns + fade + sous-titres animés ──
-        sub_filter = ""
+        # ── Filtre vidéo : scale + Ken Burns + fade + sous-titres ASS ──
+        ass_path = None
         words = seg.get("words", [])
         if words and dur > 1:
-            sub_filter = generate_subtitle_filter(words, W, H)
+            ass_path = build_ass(words, frames_dir / f"subs_{i:02d}.ass")
 
         vf_parts = [f"scale={W}:{H}"]
 
@@ -216,8 +216,9 @@ def build_video(segments: list[dict], photo_paths: list[str],
             f"fade=t=in:st=0:d={FADE_D}:color=black",
             f"fade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}:color=black",
         ]
-        if sub_filter:
-            vf_parts.append(sub_filter)
+        if ass_path:
+            # Un SEUL filtre libass remplace les dizaines de drawtext chaînés
+            vf_parts.append(f"ass={ass_path}")
         vf = ",".join(vf_parts)
 
         if seg["audio"] and os.path.exists(seg["audio"]):

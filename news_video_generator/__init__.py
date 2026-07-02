@@ -21,7 +21,7 @@ Architecture du package (voir chaque module pour le détail) :
     photos.py     — ÉTAPE 2 : Unsplash + fonds générés
     audio.py      — ÉTAPE 3 : synthèse vocale edge-tts / espeak
     render.py     — ÉTAPE 4a : rendu visuel PIL (intro/news/outro)
-    subtitles.py  — ÉTAPE 4b : filtre ffmpeg sous-titres animés
+    subtitles.py  — ÉTAPE 4b : sous-titres karaoké ASS (libass)
     video.py       — ÉTAPE 4c/5 : montage ffmpeg, musique, validation
 
 Ce fichier __init__.py réexporte l'intégralité de l'API publique (et
@@ -58,7 +58,7 @@ from .render import (
     _fonts, _wrap, _draw_gold_line, _draw_newspaper_icon,
     render_intro, render_news_frame, render_outro,
 )
-from .subtitles import _sanitize_word_timings, generate_subtitle_filter
+from .subtitles import _sanitize_word_timings, build_ass
 from .video import (
     get_music_path, mix_background_music, validate_mp4, cleanup_frames,
     build_video,
@@ -78,7 +78,7 @@ __all__ = [
     "EDGE_TTS_VOICE", "EDGE_TTS_RATE", "EDGE_TTS_RETRIES", "EDGE_TTS_TIMEOUT",
     "text_to_wav_edge", "text_to_wav_espeak", "wav_to_mp3", "make_audio", "generate_all_audio",
     "render_intro", "render_news_frame", "render_outro",
-    "generate_subtitle_filter",
+    "build_ass",
     "get_music_path", "mix_background_music", "validate_mp4", "cleanup_frames", "build_video",
     "build_metadata", "save_metadata",
     "humanize_for_speech", "humanize_script",
