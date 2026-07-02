@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
 run_pipeline.py — Script de génération appelé par GitHub Actions
-Remplace le python3 -c inline dans le workflow (plus lisible, plus fiable)
 
 Usage:
     python3 run_pipeline.py              # mode full
     python3 run_pipeline.py --demo       # mode demo (sans API)
+    python3 run_pipeline.py --top-n 7    # nombre de news (défaut 5)
+
+Étapes : News → Photos → Voix → Vidéo → Musique de fond → metadata.json
+
+NOTE : ce script exécute le MÊME pipeline complet que
+`python3 -m news_video_generator`, y compris le mixage de la musique de
+fond et l'écriture des métadonnées de publication. (Une version
+précédente dupliquait les étapes et OUBLIAIT la musique : les vidéos
+produites par le cron sortaient muettes en fond sonore.)
 """
 import sys, os, argparse
 sys.path.insert(0, '.')
@@ -15,6 +23,7 @@ import news_video_generator as m
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
+parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
 args = parser.parse_args()
 
 # Mode demo : désactiver les APIs
@@ -28,16 +37,12 @@ else:
     m.CONFIG['UNSPLASH_KEY'] = os.getenv('UNSPLASH_KEY', '')
     print("▶ Mode FULL — RSS + Groq + Unsplash")
 
-output_dir = Path('output')
-photos_dir = output_dir / 'photos'
-audio_dir  = output_dir / 'audio'
-for d in [output_dir, photos_dir, audio_dir]:
-    d.mkdir(parents=True, exist_ok=True)
+if args.top_n:
+    m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
 
-script_data = m.get_news(m.CONFIG)
-photo_paths = m.get_photos(script_data, m.CONFIG, photos_dir)
-segments    = m.generate_all_audio(script_data, m.CONFIG, audio_dir)
-video_path  = m.build_video(segments, photo_paths, script_data, m.CONFIG, output_dir)
+# main() exécute TOUT le pipeline : news, photos, audio, vidéo,
+# mixage musique, validation, métadonnées — une seule source de vérité.
+video_path = m.main()
 
 size = os.path.getsize(video_path) / 1_000_000
 print(f'✅ Vidéo générée : {video_path} ({size:.1f}MB)')
