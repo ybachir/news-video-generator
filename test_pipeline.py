@@ -185,6 +185,21 @@ def test_worldcup_demo():
     print(f"    → {meta['titre_video'][:60]}")
 
 
+@test("Normalisation vocale (scores, abréviations)")
+def test_speech():
+    import news_video_generator as m
+    assert m.humanize_for_speech("France 2-1 Brésil") == "France 2 à 1 Brésil"
+    assert "République démocratique du Congo" in m.humanize_for_speech("la RD Congo vote")
+    assert "États-Unis" in m.humanize_for_speech("les USA gagnent")
+    assert "contre" in m.humanize_for_speech("Espagne vs Argentine")
+    # Les saisons/années ne doivent PAS être touchées
+    assert "2025-2026" in m.humanize_for_speech("la saison 2025-2026")
+    # Idempotence
+    t = m.humanize_for_speech("France 2-1 Brésil")
+    assert m.humanize_for_speech(t) == t
+    print("    → France 2 à 1 Brésil ✓")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -284,6 +299,7 @@ def main():
     test_palette()
     test_metadata()
     test_worldcup_demo()
+    test_speech()
     test_espeak()
     test_wav_mp3()
     test_edge_tts_audio()

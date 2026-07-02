@@ -118,6 +118,11 @@ Voici {len(articles)} articles RSS bruts :
 Sélectionne les {n} actualités les plus importantes et variées.
 Réécris chaque résumé en style journaliste TV (2-3 phrases, 40-55 mots, factuel, dynamique, concis).
 
+RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
+- Jamais de plages ou scores avec tiret : écris "2 à 1", "de 10 à 15" — jamais "2-1" ni "10-15"
+- Noms de pays et d'institutions en toutes lettres : "République démocratique du Congo" (jamais "RD Congo"), "États-Unis" (jamais "USA")
+- Aucun sigle ni abréviation non lexicalisé, "contre" au lieu de "vs"
+
 Pour keywords_photo : choisis des mots-clés VISUELS et GÉNÉRIQUES adaptés à une
 recherche sur banque d'images (ex: "stadium", "courtroom", "hospital", "protest",
 "skyline", "factory", "soldiers") plutôt que des noms de pays ou de personnes précis,

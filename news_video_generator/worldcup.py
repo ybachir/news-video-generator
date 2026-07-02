@@ -83,7 +83,13 @@ Construis une émission "Spécial Coupe du Monde" de 5 segments, EN PRIORISANT l
 - Segment 5 : LA STAT — une statistique marquante, un record ou un joueur en vue du tournoi (uniquement si présent dans les articles).
 Si les articles ne couvrent pas assez la Coupe du Monde, complète avec les actualités football les plus importantes en le disant clairement.
 
-Style : journaliste sportif TV, dynamique, précis, 40-55 mots par résumé. Titres courts et percutants (max 8 mots, ex: "France 2-1 Brésil : qualification arrachée").
+Style : journaliste sportif TV, dynamique, précis, 40-55 mots par résumé. Titres courts et percutants (max 8 mots, ex: "France 2 à 1 Brésil : qualification arrachée").
+
+RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
+- Scores TOUJOURS avec "à" : "2 à 1", "3 à 0" — JAMAIS "2-1" ni "2:1"
+- Séances de tirs au but : "4 à 2 aux tirs au but" — jamais "t.a.b."
+- Noms de pays en toutes lettres : "République démocratique du Congo" (jamais "RD Congo"), "États-Unis" (jamais "USA")
+- Aucun sigle ni abréviation non lexicalisé, "contre" au lieu de "vs"
 
 Pour keywords_photo : mots-clés anglais TRÈS VISUELS de football, dans cet esprit :
 "soccer stadium floodlights", "football fans celebrating flags", "soccer player celebration",
@@ -188,7 +194,7 @@ def get_worldcup_news(config: dict) -> dict:
 
 def _demo_worldcup(n: int) -> dict:
     topics = [
-        ("France 2-1 Brésil : qualification arrachée",
+        ("France 2 à 1 Brésil : qualification arrachée",
          "Les Bleus renversent le Brésil en quart de finale grâce à un doublé dans les vingt dernières minutes. Un match d'une intensité rare, conclu dans une ambiance électrique au MetLife Stadium.",
          "L'Équipe", ["football fans celebrating flags", "soccer stadium floodlights", "celebration"]),
         ("Espagne-Argentine, choc des demi-finales",

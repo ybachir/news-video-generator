@@ -64,6 +64,7 @@ from .video import (
     build_video,
 )
 from .metadata import build_metadata, save_metadata
+from .speech import humanize_for_speech, humanize_script
 from .worldcup import (
     WC_RSS_FEEDS, fetch_worldcup_rss, structure_worldcup_with_groq,
     get_worldcup_news, _demo_worldcup,
@@ -80,6 +81,7 @@ __all__ = [
     "generate_subtitle_filter",
     "get_music_path", "mix_background_music", "validate_mp4", "cleanup_frames", "build_video",
     "build_metadata", "save_metadata",
+    "humanize_for_speech", "humanize_script",
     "WC_RSS_FEEDS", "get_worldcup_news",
     "main",
 ]
@@ -107,6 +109,7 @@ def main():
         CONFIG.setdefault("EDITION_BOTTOM", "MONDIAL 2026")
         CONFIG.setdefault("EDITION_BRAND",  "SPÉCIAL MONDIAL 2026")
         CONFIG.setdefault("FILE_PREFIX",    "mondial")
+        CONFIG.setdefault("EDITION_STYLE",  "worldcup")   # intro ballon + tricolore
         script_data = get_worldcup_news(CONFIG)
     else:
         script_data = get_news(CONFIG)

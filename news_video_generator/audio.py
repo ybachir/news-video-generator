@@ -185,6 +185,11 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
 
 def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list[dict]:
     print("\n🎙️  ÉTAPE 3 — Synthèse vocale (edge-tts / espeak fallback)...")
+    # Normalisation orale : scores "2-1" → "2 à 1", abréviations développées
+    # (RD Congo → République démocratique du Congo...). Appliquée AVANT la
+    # synthèse → voix, sous-titres et titres affichés restent cohérents.
+    from .speech import humanize_script
+    script_data = humanize_script(script_data)
     audio_dir.mkdir(exist_ok=True)
     segments = []
     engines_used = []
