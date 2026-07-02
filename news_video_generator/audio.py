@@ -183,6 +183,26 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
     return mp3, dur, engine, word_timings
 
 
+# Enchaînements de présentateur entre les sujets. Un vrai JT ne dit
+# jamais "Numéro 2" : il ouvre par "À la une", enchaîne avec des
+# transitions variées et clôt par "Enfin". Déterministe (pas d'aléatoire)
+# pour des vidéos reproductibles.
+_MIDDLE_TRANSITIONS = [
+    "Également au sommaire.",
+    "On poursuit.",
+    "Autre fait marquant.",
+    "Et aussi.",
+]
+
+
+def _transition(n: int, total: int) -> str:
+    if n == 1:
+        return "À la une."
+    if n == total:
+        return "Enfin."
+    return _MIDDLE_TRANSITIONS[(n - 2) % len(_MIDDLE_TRANSITIONS)]
+
+
 def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list[dict]:
     print("\n🎙️  ÉTAPE 3 — Synthèse vocale (edge-tts / espeak fallback)...")
     # Normalisation orale : scores "2-1" → "2 à 1", abréviations développées
@@ -203,9 +223,14 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
     print(f"  ✅ Intro : {dur:.1f}s — moteur : {engine}")
 
     # News
+    total = len(script_data["news"])
     for i, item in enumerate(script_data["news"]):
         n    = i + 1
-        text = f"Numéro {n}. {item['titre']}. {item['resume']}"
+        # Transition de présentateur au lieu du robotique "Numéro X."
+        # (le numéro reste affiché à l'écran dans le badge doré) :
+        # 1er sujet → "À la une", dernier → "Enfin", entre les deux des
+        # enchaînements variés, choisis par position (déterministe).
+        text = f"{_transition(n, total)} {item['titre']}. {item['resume']}"
         mp3, dur, engine, words = make_audio(text, f"news_{n:02d}", audio_dir)
         engines_used.append(engine)
         segments.append({
