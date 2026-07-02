@@ -286,49 +286,41 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
             nh = int(pw / ratio)
             photo = photo.crop([0, (ph - nh) // 2, pw, (ph - nh) // 2 + nh])
         photo = photo.resize((W, H), Image.LANCZOS)
-        # Luminosité 0.60 (validée avec l'utilisateur après 0.30 puis 0.50 :
-        # les photos doivent rester bien visibles face aux sous-titres).
-        photo = ImageEnhance.Brightness(photo).enhance(0.60)
-        photo = photo.filter(ImageFilter.GaussianBlur(radius=2))
+        # Photo PLEINE luminosité, nette (demande utilisateur : suppression
+        # de toutes les couches de flou et d'assombrissement — brightness,
+        # blur et vignette radiale retirés). La lisibilité du texte est
+        # assurée uniquement par le bandeau compact du bas + les ombres
+        # portées + la boîte semi-transparente des sous-titres.
     except Exception:
         photo = Image.new("RGB", (W, H), PALETTE["bg"])
 
-    # ── Vignette radiale légère (look plus cinématographique) ──
     img = photo.convert("RGBA")
-    vignette = Image.new("L", (W, H), 0)
-    vd = ImageDraw.Draw(vignette)
-    max_dist = ((W / 2) ** 2 + (H / 2) ** 2) ** 0.5
-    cx0, cy0 = W / 2, H * 0.42
-    # Dessiné par anneaux concentriques (rapide, pas pixel-par-pixel)
-    n_rings = 40
-    for i in range(n_rings):
-        t = i / n_rings
-        r = max_dist * (1 - t)
-        alpha = int(45 * t ** 1.6)   # vignette allégée (70 → 45) : garde le look ciné sans plomber les bords
-        vd.ellipse([cx0 - r, cy0 - r, cx0 + r, cy0 + r], fill=alpha)
-    vignette = vignette.filter(ImageFilter.GaussianBlur(radius=40))
-    black_layer = Image.new("RGBA", (W, H), (0, 0, 0, 255))
-    img = Image.composite(black_layer, img, vignette)
 
-    # ── Overlay dégradé bas ──
+    # ── Bandeau bas compact (seule couche sombre restante) ──
+    # Ne couvre que la zone texte (~30% inférieurs) au lieu de 55% de
+    # l'image : la photo reste intacte sur toute sa partie utile.
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
-    # Dégradé démarré à 45% de la hauteur (au lieu de 33%) : la zone
-    # texte du bas reste aussi protégée qu'avant, mais le milieu de la
-    # photo n'est plus mangé par le voile noir.
-    grad_start = int(H * 0.45)
+    grad_start = H - 580
     for y in range(grad_start, H):
         t     = (y - grad_start) / (H - grad_start)
-        alpha = int(245 * (t ** 0.5))
+        alpha = int(225 * (t ** 0.7))
         od.line([(0, y), (W, y)], fill=(*PALETTE["bg"], alpha))
     img = Image.alpha_composite(img, overlay)
     draw = ImageDraw.Draw(img)
 
     # ── Barre top ──
     draw.rectangle([0, 0, W, 5], fill=(*PALETTE["gold"], 255))
+    # Date dans une pilule (photo désormais pleine luminosité : un texte
+    # gris nu deviendrait illisible sur un ciel clair)
     now = datetime.now().strftime("%d/%m/%Y  %H:%M")
+    nb  = draw.textbbox((0, 0), now, font=fonts["regular_xs"])
+    nw_ = nb[2] - nb[0]
+    draw.rounded_rectangle([W // 2 - nw_ // 2 - 18, 14,
+                            W // 2 + nw_ // 2 + 18, 48],
+                           radius=17, fill=(*PALETTE["bg2"], 200))
     draw.text((W // 2, 30), now,
-              font=fonts["regular_xs"], fill=(*PALETTE["gray"], 180), anchor="mm")
+              font=fonts["regular_xs"], fill=(*PALETTE["gray"], 230), anchor="mm")
 
     # ── Badge numéro (cercle doré avec ombre portée, plus de profondeur) ──
     n  = seg["index"]
