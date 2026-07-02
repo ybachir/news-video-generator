@@ -185,7 +185,11 @@ def build_video(segments: list[dict], photo_paths: list[str],
 
     for i, seg in enumerate(segment_files):
         clip_out = str(frames_dir / f"clip_{i:02d}.mp4")
-        dur      = seg["duration"]
+        # Respiration : ~0.5s de silence après le dernier mot, AVANT le
+        # fondu noir. Sans elle, chaque segment se coupait à la milliseconde
+        # où la voix finissait — rythme haché, narration précipitée.
+        BREATH   = 0.5 if seg.get("type") == "news" else 0.35
+        dur      = seg["duration"] + BREATH
         fps      = config["FPS"]
 
         # ── Filtre vidéo : scale + Ken Burns + fade + sous-titres ASS ──
@@ -224,6 +228,7 @@ def build_video(segments: list[dict], photo_paths: list[str],
         if seg["audio"] and os.path.exists(seg["audio"]):
             # Filtre audio : fade in + fade out (évite les clics)
             af = (
+                f"apad=pad_dur=1.0,"   # prolonge l'audio en silence (coupé par -t)
                 f"afade=t=in:st=0:d={FADE_D},"
                 f"afade=t=out:st={max(0, dur - FADE_D):.2f}:d={FADE_D}"
             )

@@ -14,7 +14,9 @@ import subprocess
 from pathlib import Path
 
 EDGE_TTS_VOICE    = "fr-FR-DeniseNeural"
-EDGE_TTS_RATE     = "+8%"
+# +2% (et non +8%) : un présentateur est vif mais articulé — à +8% la
+# voix semblait pressée, surtout sur les scores et noms propres.
+EDGE_TTS_RATE     = "+2%"
 EDGE_TTS_RETRIES  = 3
 EDGE_TTS_TIMEOUT  = 20   # secondes par tentative
 
@@ -229,11 +231,11 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
     total = len(script_data["news"])
     for i, item in enumerate(script_data["news"]):
         n    = i + 1
-        # Transition de présentateur au lieu du robotique "Numéro X."
-        # (le numéro reste affiché à l'écran dans le badge doré) :
-        # 1er sujet → "À la une", dernier → "Enfin", entre les deux des
-        # enchaînements variés, choisis par position (déterministe).
-        text = f"{_transition(n, total)} {item['titre']}. {item['resume']}"
+        # La voix ne lit PLUS le titre : un titre est télégraphique, fait
+        # pour l'écran (où il reste affiché), pas pour la bouche — aucun
+        # présentateur ne lit son bandeau. La voix raconte : transition
+        # naturelle + résumé écrit pour l'oreille (voir prompts Groq).
+        text = f"{_transition(n, total)} {item['resume']}"
         mp3, dur, engine, words = make_audio(text, f"news_{n:02d}", audio_dir)
         engines_used.append(engine)
         segments.append({
