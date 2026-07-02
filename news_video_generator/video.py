@@ -144,9 +144,12 @@ def build_video(segments: list[dict], photo_paths: list[str],
         dur   = seg.get("duration", 6.0) + 0.3
 
         if stype == "intro":
-            frame = render_intro(seg["text"], fonts)
+            frame = render_intro(seg["text"], fonts,
+                                 top=config.get("EDITION_TOP", "JOURNAL"),
+                                 bottom=config.get("EDITION_BOTTOM", "DU MONDE"))
         elif stype == "outro":
-            frame = render_outro(seg["text"], fonts)
+            frame = render_outro(seg["text"], fonts,
+                                 brand=config.get("EDITION_BRAND", "JOURNAL DU MONDE"))
         else:
             photo_p = photo_map.get(seg["index"], list(photo_map.values())[0])
             frame   = render_news_frame(seg, photo_p, fonts)
@@ -167,7 +170,8 @@ def build_video(segments: list[dict], photo_paths: list[str],
     # ── Encoder chaque segment en clip MP4 ──
     print("\n  ⚙️  Encodage MP4 via ffmpeg...")
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M")
-    out_path   = str(output_dir / f"journal_{timestamp}.mp4")
+    prefix     = config.get("FILE_PREFIX", "journal")
+    out_path   = str(output_dir / f"{prefix}_{timestamp}.mp4")
     clip_paths = []
 
     # Fondu noir : 0.3s en entrée ET sortie de chaque clip

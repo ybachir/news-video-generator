@@ -24,6 +24,8 @@ import news_video_generator as m
 parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
 parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
+parser.add_argument("--theme", default="journal", choices=["journal", "worldcup"],
+                    help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026")
 args = parser.parse_args()
 
 # Mode demo : désactiver les APIs
@@ -36,6 +38,10 @@ else:
     m.CONFIG['GROQ_API_KEY'] = os.getenv('GROQ_API_KEY', '')
     m.CONFIG['UNSPLASH_KEY'] = os.getenv('UNSPLASH_KEY', '')
     print("▶ Mode FULL — RSS + Groq + Unsplash")
+
+m.CONFIG['THEME'] = args.theme
+if args.theme == "worldcup":
+    print("▶ Édition SPÉCIAL COUPE DU MONDE 2026 ⚽")
 
 if args.top_n:
     m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
