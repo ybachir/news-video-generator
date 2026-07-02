@@ -54,6 +54,36 @@ def decode_b64_env(key: str) -> dict:
             raise ValueError(f"Impossible de décoder {key} : {e}")
 
 
+def load_metadata(video_path: str) -> dict:
+    """
+    Cherche le metadata.json généré par le pipeline (titre YouTube,
+    description avec sommaire du jour, caption Instagram, hashtags) :
+    1. à côté du MP4
+    2. dans ses dossiers parents (cas de l'artifact téléchargé par publish.yml)
+    3. dans ./output/
+    Retourne {} si introuvable — les valeurs par défaut génériques
+    prendront le relais.
+    """
+    vp = Path(video_path).resolve()
+    candidates = [
+        vp.parent / "metadata.json",
+        vp.parent.parent / "metadata.json",
+        Path("output") / "metadata.json",
+        Path("downloaded") / "metadata.json",
+    ]
+    for c in candidates:
+        try:
+            if c.exists():
+                with open(c, encoding="utf-8") as f:
+                    meta = json.load(f)
+                log(f"Métadonnées chargées : {c}", "📝")
+                return meta
+        except Exception as e:
+            log(f"metadata.json illisible ({c}) : {e}", "⚠️")
+    log("Pas de metadata.json — titres/descriptions génériques utilisés", "ℹ️")
+    return {}
+
+
 # ═══════════════════════════════════════════════════════════════
 #  YOUTUBE
 # ═══════════════════════════════════════════════════════════════
@@ -313,6 +343,12 @@ def main():
   Date     : {datetime.now().strftime('%d/%m/%Y %H:%M')}
 """)
 
+    # ── Métadonnées générées par le pipeline (titre du jour, sommaire...) ──
+    meta        = load_metadata(video_path)
+    title       = args.title   or meta.get("titre_video", "")
+    description = meta.get("description", "")
+    caption     = args.caption or meta.get("caption", "")
+
     results = {}
     platform = args.platform.lower()
 
@@ -320,7 +356,7 @@ def main():
     if platform in ("youtube", "all"):
         print("📺 YOUTUBE")
         print("─" * 60)
-        url = upload_youtube(video_path, args.title, "")
+        url = upload_youtube(video_path, title, description)
         results["youtube"] = url
         print()
 
@@ -328,7 +364,7 @@ def main():
     if platform in ("instagram", "all"):
         print("📸 INSTAGRAM REELS")
         print("─" * 60)
-        post_id = upload_instagram(video_path, args.caption, args.public_url)
+        post_id = upload_instagram(video_path, caption, args.public_url)
         results["instagram"] = post_id
         print()
 
