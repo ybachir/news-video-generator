@@ -53,7 +53,7 @@ def test_import():
 @test("Dépendances Python")
 def test_deps():
     missing = []
-    for pkg in ["moviepy", "PIL", "requests", "feedparser", "numpy"]:
+    for pkg in ["PIL", "requests", "feedparser", "numpy"]:
         try:
             __import__(pkg)
         except ImportError:
@@ -157,6 +157,19 @@ def test_palette():
     print(f"    → gold={m.PALETTE['gold']}  bg={m.PALETTE['bg']}")
 
 
+@test("Métadonnées de publication (build_metadata)")
+def test_metadata():
+    import news_video_generator as m
+    data = m._demo_news(5)
+    meta = m.build_metadata(data, "/tmp/journal_test.mp4")
+    for field in ["titre_video", "description", "caption", "hashtags", "titres"]:
+        assert field in meta, f"Champ '{field}' manquant"
+    assert len(meta["titres"]) == 5
+    assert len(meta["caption"]) <= 2200, "Caption > limite Meta (2200)"
+    assert all(not h.startswith("#") for h in meta["hashtags"])
+    print(f"    → titre : {meta['titre_video'][:60]}")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -184,7 +197,9 @@ def test_wav_mp3():
 def test_edge_tts_audio():
     import news_video_generator as m
     out_wav = "/tmp/test_edge.wav"
-    ok = m.text_to_wav_edge("Bonjour, ceci est un test de la voix Microsoft Neural.", out_wav)
+    # text_to_wav_edge retourne (succès, word_timings) — bien déballer le
+    # tuple, sinon "if not ok" est toujours faux (un tuple est truthy)
+    ok, words = m.text_to_wav_edge("Bonjour, ceci est un test de la voix Microsoft Neural.", out_wav)
     if not ok:
         print(f"    {YELLOW}⚠️  edge-tts indisponible (réseau ?), espeak sera utilisé{RESET}")
         return
@@ -252,6 +267,7 @@ def main():
     test_render_news()
     test_render_outro()
     test_palette()
+    test_metadata()
     test_espeak()
     test_wav_mp3()
     test_edge_tts_audio()
