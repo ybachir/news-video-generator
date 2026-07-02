@@ -26,7 +26,10 @@ ABBREVIATIONS = [
     (r"\bJO\b",                "Jeux olympiques"),
     (r"\bvs\.?\b",             "contre"),
     (r"\bVS\.?\b",             "contre"),
-    (r"\bt\.?a\.?b\b\.?",      "aux tirs au but"),
+    # Neutre, sans préposition : "aux t.a.b." → "aux tirs au but",
+    # "séance de t.a.b." → "séance de tirs au but" (la préposition
+    # déjà présente dans la phrase fait le travail)
+    (r"\bt\.?a\.?b\b\.?",      "tirs au but"),
     (r"\bkm/h\b",              "kilomètres heure"),
     (r"\bn°\s*",               "numéro "),
     (r"\bN°\s*",               "numéro "),
