@@ -63,6 +63,7 @@ from .video import (
     get_music_path, mix_background_music, validate_mp4, cleanup_frames,
     build_video,
 )
+from .metadata import build_metadata, save_metadata
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
@@ -74,6 +75,7 @@ __all__ = [
     "render_intro", "render_news_frame", "render_outro",
     "generate_subtitle_filter",
     "get_music_path", "mix_background_music", "validate_mp4", "cleanup_frames", "build_video",
+    "build_metadata", "save_metadata",
     "main",
 ]
 
@@ -132,6 +134,10 @@ def main():
             print("  ⚠️  Mix échoué — vidéo sans musique conservée")
     else:
         print("\n🎵 Pas de musique trouvée — dépose assets/ambient_news.mp3 pour l'activer")
+
+    # 6. Métadonnées de publication (titre YouTube, description, caption IG)
+    print("\n📝 ÉTAPE 6 — Métadonnées de publication...")
+    save_metadata(script_data, video_path, output_dir)
 
     elapsed = time.time() - t0
     mins, secs = divmod(int(elapsed), 60)
