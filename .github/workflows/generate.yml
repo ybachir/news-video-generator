@@ -16,6 +16,15 @@ on:
   schedule:
     - cron: "0 7 * * *"
 
+# Un seul run de génération à la fois (un run manuel pendant le cron
+# n'écrasera pas la release/artifact de l'autre)
+concurrency:
+  group: generate-journal
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # requis pour publier la release "latest"
+
 jobs:
   generate:
     name: 🎬 Pipeline News → Vidéo
@@ -75,6 +84,27 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      # Release publique "latest" : URL stable et téléchargeable SANS être
+      # connecté à GitHub (contrairement aux artifacts) — sert aussi de
+      # VIDEO_PUBLIC_URL pour la publication Instagram (Meta exige une URL
+      # publique du MP4). Uniquement pour les vrais runs (cron / full).
+      - name: 🌐 Publier la release "latest"
+        if: ${{ github.event.inputs.mode != 'demo' && github.event.inputs.mode != 'test' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MP4=$(ls output/*.mp4 | head -1)
+          cp "$MP4" journal_latest.mp4
+          [ -f output/metadata.json ] && cp output/metadata.json . || echo '{}' > metadata.json
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest journal_latest.mp4 metadata.json \
+            --title "📰 Journal du $(date '+%d/%m/%Y')" \
+            --notes "Dernière vidéo générée automatiquement le $(date '+%d/%m/%Y à %H:%M UTC').
+
+          **Téléchargement direct :** [journal_latest.mp4](https://github.com/${{ github.repository }}/releases/download/latest/journal_latest.mp4)" \
+            --latest
+          echo "✅ Release publiée : https://github.com/${{ github.repository }}/releases/download/latest/journal_latest.mp4"
+
       - name: 📊 Résumé
         if: always()
         run: |
@@ -88,4 +118,5 @@ jobs:
             SIZE=$(du -sh output/*.mp4 2>/dev/null | cut -f1)
             echo "| Taille vidéo | $SIZE |" >> $GITHUB_STEP_SUMMARY
             echo "✅ **Vidéo disponible dans les Artifacts**" >> $GITHUB_STEP_SUMMARY
+            echo "🌐 **Téléchargement direct : [journal_latest.mp4](https://github.com/${{ github.repository }}/releases/download/latest/journal_latest.mp4)**" >> $GITHUB_STEP_SUMMARY
           fi
