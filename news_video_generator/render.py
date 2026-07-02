@@ -148,6 +148,130 @@ def render_intro(text: str, fonts: dict,
     return np.array(img.convert("RGB"))
 
 
+# Couleurs des trois pays hôtes du Mondial 2026 (thème de l'édition spéciale)
+WC_COLORS = {
+    "red":   (216, 30, 5),     # Canada
+    "blue":  (10, 49, 97),     # États-Unis
+    "green": (0, 104, 71),     # Mexique
+}
+
+
+def _draw_soccer_ball(img: Image.Image, cx: int, cy: int, r: int) -> Image.Image:
+    """Ballon de football stylisé dessiné en vectoriel (design ORIGINAL —
+    le logo officiel FIFA est une marque déposée qu'on ne peut pas
+    reproduire) : sphère claire, pentagone central noir, 5 pans noirs en
+    périphérie reliés par les coutures, le tout découpé au cercle."""
+    import math
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d     = ImageDraw.Draw(layer)
+
+    # Sphère
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(244, 244, 248, 255))
+
+    def pent(pcx, pcy, pr, rot):
+        return [(pcx + pr * math.cos(math.radians(rot + k * 72)),
+                 pcy + pr * math.sin(math.radians(rot + k * 72))) for k in range(5)]
+
+    # Pentagone central (pointe vers le haut)
+    center_pts = pent(cx, cy, r * 0.38, -90)
+    d.polygon(center_pts, fill=(18, 18, 24, 255))
+
+    # 5 pans périphériques + coutures depuis les sommets du pentagone
+    for k in range(5):
+        ang = math.radians(-90 + k * 72)
+        px, py = cx + r * 0.98 * math.cos(ang), cy + r * 0.98 * math.sin(ang)
+        d.polygon(pent(px, py, r * 0.30, math.degrees(ang) + 36),
+                  fill=(18, 18, 24, 255))
+        vx, vy = center_pts[k]
+        d.line([vx, vy, cx + r * 0.72 * math.cos(ang), cy + r * 0.72 * math.sin(ang)],
+               fill=(18, 18, 24, 255), width=max(3, r // 22))
+
+    # Découpe circulaire + contour
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    layer.putalpha(Image.composite(layer.split()[3], Image.new("L", img.size, 0), mask))
+    out = Image.alpha_composite(img, layer)
+    ImageDraw.Draw(out).ellipse([cx - r, cy - r, cx + r, cy + r],
+                                outline=(*PALETTE["gold"], 220), width=4)
+    return out
+
+
+def render_intro_worldcup(text: str, fonts: dict,
+                          top: str = "SPÉCIAL",
+                          bottom: str = "MONDIAL 2026") -> np.ndarray:
+    """Intro de l'édition Coupe du Monde 2026 : ballon vectoriel, bandes
+    tricolores des pays hôtes (Canada/USA/Mexique), or du template."""
+    img  = Image.new("RGB", (W, H), PALETTE["bg"])
+    draw = ImageDraw.Draw(img)
+    for y in range(H):
+        t = y / H
+        draw.line([(0, y), (W, y)],
+                  fill=(int(PALETTE["bg"][0] + t * 6),
+                        int(PALETTE["bg"][1] + t * 12),
+                        int(PALETTE["bg"][2] + t * 10)))
+
+    img  = img.convert("RGBA")
+    draw = ImageDraw.Draw(img)
+
+    # Bandes haut/bas tricolores (tiers rouge / bleu / vert)
+    third = W // 3
+    for i, c in enumerate([WC_COLORS["red"], WC_COLORS["blue"], WC_COLORS["green"]]):
+        draw.rectangle([i * third, 0,   (i + 1) * third, 8], fill=(*c, 255))
+        draw.rectangle([i * third, H-8, (i + 1) * third, H], fill=(*c, 255))
+
+    # Glow doré derrière la carte (identité du template conservée)
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(glow)
+    cx, cy = W // 2, H // 2
+    gd.ellipse([cx - 400, cy - 360, cx + 400, cy + 360], fill=(*PALETTE["gold"], 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=60))
+    img  = Image.alpha_composite(img, glow)
+
+    # Carte centrale
+    draw = ImageDraw.Draw(img)
+    pad = 70
+    cy1, cy2 = H // 2 - 320, H // 2 + 300
+    draw.rounded_rectangle([pad, cy1, W - pad, cy2],
+                            radius=28, fill=(*PALETTE["bg2"], 235))
+
+    # Ballon
+    img  = _draw_soccer_ball(img, W // 2, H // 2 - 190, 88)
+    draw = ImageDraw.Draw(img)
+
+    # Typographie
+    draw.text((W // 2, H // 2 - 40), top,
+              font=fonts["bold_lg"], fill=(*PALETTE["white"], 255), anchor="mm")
+    bottom_font = fonts["bold_xl"]
+    if draw.textbbox((0, 0), bottom, font=bottom_font)[2] > W - 220:
+        bottom_font = fonts["bold_lg"]
+    draw.text((W // 2, H // 2 + 60), bottom,
+              font=bottom_font, fill=(*PALETTE["gold"], 255), anchor="mm")
+
+    # Barre tricolore sous le titre (3 segments arrondis)
+    bw, bh, gap = 90, 10, 14
+    x0 = W // 2 - (3 * bw + 2 * gap) // 2
+    yb = H // 2 + 130
+    for i, c in enumerate([WC_COLORS["red"], WC_COLORS["blue"], WC_COLORS["green"]]):
+        draw.rounded_rectangle([x0 + i * (bw + gap), yb,
+                                x0 + i * (bw + gap) + bw, yb + bh],
+                               radius=5, fill=(*c, 255))
+
+    # Date
+    date_str = date_fr(datetime.now()).upper()
+    draw.text((W // 2, yb + 48), date_str,
+              font=fonts["regular_sm"], fill=(*PALETTE["gray"], 200), anchor="mm")
+
+    # Accroche
+    lines = _wrap(text, fonts["regular_md"], W - 160, draw)
+    y0 = yb + 105
+    for line in lines[:3]:
+        draw.text((W // 2, y0), line,
+                  font=fonts["regular_md"], fill=(*PALETTE["gray"], 190), anchor="mm")
+        y0 += 50
+
+    return np.array(img.convert("RGB"))
+
+
 def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     """Frame news : photo assombrie + overlay premium + texte doré."""
     # ── Photo de fond ──

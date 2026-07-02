@@ -144,9 +144,15 @@ def build_video(segments: list[dict], photo_paths: list[str],
         dur   = seg.get("duration", 6.0) + 0.3
 
         if stype == "intro":
-            frame = render_intro(seg["text"], fonts,
-                                 top=config.get("EDITION_TOP", "JOURNAL"),
-                                 bottom=config.get("EDITION_BOTTOM", "DU MONDE"))
+            if config.get("EDITION_STYLE") == "worldcup":
+                from .render import render_intro_worldcup
+                frame = render_intro_worldcup(seg["text"], fonts,
+                                              top=config.get("EDITION_TOP", "SPÉCIAL"),
+                                              bottom=config.get("EDITION_BOTTOM", "MONDIAL 2026"))
+            else:
+                frame = render_intro(seg["text"], fonts,
+                                     top=config.get("EDITION_TOP", "JOURNAL"),
+                                     bottom=config.get("EDITION_BOTTOM", "DU MONDE"))
         elif stype == "outro":
             frame = render_outro(seg["text"], fonts,
                                  brand=config.get("EDITION_BRAND", "JOURNAL DU MONDE"))
