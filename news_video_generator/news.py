@@ -7,6 +7,7 @@ RSS brut puis démo statique si aucune source n'est disponible.
 import re
 import json
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 import feedparser
@@ -17,7 +18,7 @@ RSS_FEEDS = [
     ("Le Monde",     "https://www.lemonde.fr/rss/une.xml"),
     ("France24",     "https://www.france24.com/fr/rss"),
     ("BBC Monde",    "https://feeds.bbci.co.uk/news/world/rss.xml"),
-    ("Reuters",      "https://feeds.reuters.com/reuters/topNews"),
+    ("France Info",  "https://www.francetvinfo.fr/titres.rss"),
     ("Al Jazeera",   "https://www.aljazeera.com/xml/rss/all.xml"),
     ("The Guardian", "https://www.theguardian.com/world/rss"),
     ("RFI",          "https://www.rfi.fr/fr/rss-podcasts/rfi-monde"),
@@ -26,42 +27,79 @@ RSS_FEEDS = [
     ("Le Figaro",    "https://www.lefigaro.fr/rss/figaro_actualites.xml"),
 ]
 
+# feedparser.parse(url) n'a AUCUN timeout : un seul feed lent peut bloquer
+# le pipeline plusieurs minutes sur le runner CI. On télécharge donc
+# nous-mêmes avec requests (timeout strict) puis on parse les bytes.
+RSS_TIMEOUT = 10
+RSS_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; NewsVideoBot/1.0)"}
+
+
+def _fetch_one_feed(source: str, url: str, per_feed: int = 3) -> list[dict]:
+    """Télécharge et parse UN feed RSS avec timeout strict."""
+    out = []
+    try:
+        r = requests.get(url, timeout=RSS_TIMEOUT, headers=RSS_HEADERS)
+        if r.status_code != 200:
+            return out
+        feed = feedparser.parse(r.content)
+        for entry in feed.entries[:per_feed]:
+            title = entry.get("title", "").strip()
+            if not title:
+                continue
+            desc = re.sub(r"<[^>]+>", "",
+                          entry.get("summary", "") or
+                          entry.get("description", "")).strip()
+            out.append({
+                "titre_brut": title[:200],
+                "desc_brute": desc[:400] if desc else title,
+                "source": source,
+            })
+    except Exception:
+        pass
+    return out
+
 
 def fetch_rss_raw(n: int = 20) -> list[dict]:
-    """Scrape les RSS feeds et retourne les articles bruts."""
-    print("  📡 Scraping RSS feeds...")
+    """Scrape les RSS feeds EN PARALLÈLE et retourne les articles bruts.
+
+    Parallélisation (10 feeds simultanés) : la collecte passe de ~30-60s
+    séquentiels à ~5-10s, et un feed mort/lent ne bloque plus les autres.
+    L'ordre des sources RSS_FEEDS est préservé dans le résultat (priorité
+    aux sources en tête de liste)."""
+    print("  📡 Scraping RSS feeds (parallèle)...")
+    per_source: dict[str, list[dict]] = {}
+    with ThreadPoolExecutor(max_workers=len(RSS_FEEDS)) as ex:
+        futures = {ex.submit(_fetch_one_feed, s, u): s for s, u in RSS_FEEDS}
+        for fut in as_completed(futures):
+            per_source[futures[fut]] = fut.result()
+
     results, seen = [], set()
-    for source, url in RSS_FEEDS:
-        if len(results) >= n:
-            break
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:3]:
-                title = entry.get("title", "").strip()
-                if not title or title in seen:
-                    continue
-                seen.add(title)
-                desc = re.sub(r"<[^>]+>", "",
-                              entry.get("summary", "") or
-                              entry.get("description", "")).strip()
-                results.append({
-                    "titre_brut": title[:200],
-                    "desc_brute": desc[:400] if desc else title,
-                    "source": source,
-                })
-        except Exception:
-            continue
-    print(f"  ✅ {len(results)} articles RSS collectés")
+    for source, _ in RSS_FEEDS:           # ré-ordonner selon la priorité des sources
+        for art in per_source.get(source, []):
+            if art["titre_brut"] in seen:
+                continue
+            seen.add(art["titre_brut"])
+            results.append(art)
+
+    ok_feeds = sum(1 for v in per_source.values() if v)
+    print(f"  ✅ {len(results)} articles RSS collectés ({ok_feeds}/{len(RSS_FEEDS)} sources OK)")
     return results[:n]
+
+
+# Modèles Groq essayés dans l'ordre : si le 70B est décommissionné ou
+# rate-limité, on retombe sur le 8B instant (qualité moindre mais toujours
+# très correcte pour de la structuration JSON).
+GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
 
 def structure_with_groq(articles: list[dict], api_key: str, n: int) -> dict | None:
     """
-    Envoie les articles bruts à Groq (Llama 3.3, gratuit) pour :
+    Envoie les articles bruts à Groq (gratuit) pour :
     - sélectionner les n plus importants
     - réécrire en style journaliste TV
     - classer par catégorie
     - extraire les keywords photo
+    - générer les métadonnées de publication (titre YouTube, hashtags)
     """
     if not api_key:
         return None
@@ -98,37 +136,48 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
     }}
   ],
   "intro": "Accroche d'ouverture dynamique (15 mots max)",
-  "outro": "Phrase de clôture (10 mots max)"
+  "outro": "Phrase de clôture (10 mots max)",
+  "titre_video": "Titre YouTube accrocheur (max 90 caractères, avec la date {today})",
+  "hashtags": ["actualités", "5 à 8 hashtags français SANS le symbole #"]
 }}"""
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    body = {
-        "model": "llama-3.3-70b-versatile",
-        "max_tokens": 2000,
-        "temperature": 0.4,
-        "messages": [{"role": "user", "content": prompt}],
-    }
 
-    try:
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers, json=body, timeout=30
-        )
-        data = r.json()
-        raw = data["choices"][0]["message"]["content"].strip()
-        # Nettoyer éventuels backticks
-        raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
-        # Extraire le JSON
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if match:
-            result = json.loads(match.group(0))
-            print(f"  ✅ {len(result.get('news', []))} news structurées via Groq")
-            return result
-    except Exception as e:
-        print(f"  ⚠️  Groq erreur : {e}")
+    for model in GROQ_MODELS:
+        for attempt in (1, 2):
+            body = {
+                "model": model,
+                "max_tokens": 2500,
+                "temperature": 0.4,
+                # Force le modèle à renvoyer du JSON valide (supporté par Groq)
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            try:
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers, json=body, timeout=30
+                )
+                if r.status_code == 429:
+                    print(f"  ⚠️  Groq rate-limit ({model}) — nouvel essai...")
+                    import time as _t; _t.sleep(3 * attempt)
+                    continue
+                if r.status_code != 200:
+                    print(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:150]}")
+                    break   # essayer le modèle suivant
+                raw = r.json()["choices"][0]["message"]["content"].strip()
+                raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
+                match = re.search(r'\{.*\}', raw, re.DOTALL)
+                if match:
+                    result = json.loads(match.group(0))
+                    if result.get("news"):
+                        print(f"  ✅ {len(result['news'])} news structurées via Groq ({model})")
+                        return result
+            except Exception as e:
+                print(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {e}")
     return None
 
 
@@ -169,6 +218,8 @@ def get_news(config: dict) -> dict:
             "news":  news,
             "intro": f"Bonjour, voici les {len(news)} actualités du {date_str}.",
             "outro": "Restez informés. À très bientôt.",
+            "titre_video": f"Journal du Monde — {date_fr(datetime.now(), with_weekday=False)}",
+            "hashtags": ["actualités", "journal", "news", "monde", "information"],
         }
 
     # 4. Démo statique
@@ -189,4 +240,6 @@ def _demo_news(n: int) -> dict:
         "news":  news,
         "intro": f"Bienvenue dans votre journal du {date_fr(datetime.now(), with_weekday=False)}.",
         "outro": "Merci de votre fidélité. À demain.",
+        "titre_video": f"Journal du Monde — {date_fr(datetime.now(), with_weekday=False)}",
+        "hashtags": ["actualités", "journal", "news", "monde", "information"],
     }
