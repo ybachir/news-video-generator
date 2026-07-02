@@ -72,8 +72,13 @@ def _draw_newspaper_icon(draw: ImageDraw, cx: int, cy: int, size: int = 70):
                         fill=(*PALETTE["white"], 220))
 
 
-def render_intro(text: str, fonts: dict) -> np.ndarray:
-    """Écran d'intro : fond sombre, logo centré, glow doré diffus."""
+def render_intro(text: str, fonts: dict,
+                 top: str = "JOURNAL", bottom: str = "DU MONDE") -> np.ndarray:
+    """Écran d'intro : fond sombre, logo centré, glow doré diffus.
+
+    `top`/`bottom` : lignes de la marque (paramétrées pour permettre des
+    éditions spéciales, ex. SPÉCIAL / MONDIAL 2026). Si la ligne dorée est
+    trop large pour la carte, on rétrograde automatiquement la police."""
     img  = Image.new("RGB", (W, H), PALETTE["bg"])
     draw = ImageDraw.Draw(img)
 
@@ -112,13 +117,17 @@ def render_intro(text: str, fonts: dict) -> np.ndarray:
     # Icône "journal" dessinée en vectoriel (évite les glyphes emoji manquants)
     _draw_newspaper_icon(draw, W // 2, H // 2 - 190, size=70)
 
-    # JOURNAL
-    draw.text((W // 2, H // 2 - 80), "JOURNAL",
+    # Ligne du haut (blanc)
+    draw.text((W // 2, H // 2 - 80), top,
               font=fonts["bold_lg"], fill=(*PALETTE["white"], 255), anchor="mm")
 
-    # DU MONDE en doré
-    draw.text((W // 2, H // 2 + 20), "DU MONDE",
-              font=fonts["bold_xl"], fill=(*PALETTE["gold"], 255), anchor="mm")
+    # Ligne du bas en doré — police réduite automatiquement si trop large
+    # pour la carte (ex: "MONDIAL 2026" plus long que "DU MONDE")
+    bottom_font = fonts["bold_xl"]
+    if draw.textbbox((0, 0), bottom, font=bottom_font)[2] > W - 220:
+        bottom_font = fonts["bold_lg"]
+    draw.text((W // 2, H // 2 + 20), bottom,
+              font=bottom_font, fill=(*PALETTE["gold"], 255), anchor="mm")
 
     # Ligne séparatrice
     _draw_gold_line(draw, W // 2 - 80, H // 2 + 95, W // 2 + 80)
@@ -153,11 +162,9 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
             nh = int(pw / ratio)
             photo = photo.crop([0, (ph - nh) // 2, pw, (ph - nh) // 2 + nh])
         photo = photo.resize((W, H), Image.LANCZOS)
-        # Luminosité 0.50 (au lieu de 0.30 : les photos ressortaient
-        # beaucoup trop sombres par rapport aux sous-titres). Le dégradé
-        # noir du bas + la boîte des sous-titres suffisent à garantir la
-        # lisibilité du texte sans écraser toute la photo.
-        photo = ImageEnhance.Brightness(photo).enhance(0.50)
+        # Luminosité 0.60 (validée avec l'utilisateur après 0.30 puis 0.50 :
+        # les photos doivent rester bien visibles face aux sous-titres).
+        photo = ImageEnhance.Brightness(photo).enhance(0.60)
         photo = photo.filter(ImageFilter.GaussianBlur(radius=2))
     except Exception:
         photo = Image.new("RGB", (W, H), PALETTE["bg"])
@@ -260,7 +267,8 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     return np.array(img.convert("RGB"))
 
 
-def render_outro(text: str, fonts: dict) -> np.ndarray:
+def render_outro(text: str, fonts: dict,
+                 brand: str = "JOURNAL DU MONDE") -> np.ndarray:
     """Écran outro : CTA abonnement + palette premium, glow doré cohérent
     avec l'intro."""
     img  = Image.new("RGB", (W, H), PALETTE["bg"])
@@ -291,7 +299,7 @@ def render_outro(text: str, fonts: dict) -> np.ndarray:
                             radius=28, fill=(*PALETTE["bg2"], 230))
 
     _draw_newspaper_icon(draw, W // 2, H // 2 - 170, size=62)
-    draw.text((W // 2, H // 2 - 60), "JOURNAL DU MONDE",
+    draw.text((W // 2, H // 2 - 60), brand,
               font=fonts["bold_md"], fill=(*PALETTE["white"], 255), anchor="mm")
 
     _draw_gold_line(draw, W // 2 - 90, H // 2 - 10, W // 2 + 90)
