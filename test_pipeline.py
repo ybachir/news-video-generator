@@ -200,6 +200,24 @@ def test_speech():
     print("    → France 2 à 1 Brésil ✓")
 
 
+@test("Sous-titres ASS (groupement par phrases + karaoké)")
+def test_subtitles_ass():
+    import news_video_generator as m
+    words = [{"word": w, "start": i*0.3, "end": i*0.3+0.25}
+             for i, w in enumerate("À la une, France 2 à 1 Brésil. Une victoire historique.".split())]
+    path = m.build_ass(words, "/tmp/test_suite.ass")
+    content = open(path).read()
+    assert content.count("Dialogue:") == len(words), "1 évènement par mot attendu"
+    assert "H18C5F5" in content, "surlignage doré absent"
+    assert "fad(120" in content, "fondu d'entrée absent"
+    assert "DejaVu Sans" in content
+    # timestamps croissants
+    import re
+    starts = re.findall(r"Dialogue: 0,(\d:\d+:\d+\.\d+)", content)
+    assert starts == sorted(starts)
+    print(f"    → {len(words)} mots, {content.count('Dialogue:')} évènements ASS")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -299,6 +317,7 @@ def main():
     test_palette()
     test_metadata()
     test_worldcup_demo()
+    test_subtitles_ass()
     test_speech()
     test_espeak()
     test_wav_mp3()
