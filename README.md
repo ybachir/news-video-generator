@@ -69,7 +69,7 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 ## 🏗️ Pipeline détaillé
 
 ### Étape 1 — Collecte & structuration des actualités
-- Scraping de **10 RSS feeds** (Le Monde, France24, BBC, Reuters, Al Jazeera…)
+- Scraping **parallèle** de **10 RSS feeds** (Le Monde, France24, BBC, France Info, Al Jazeera…) avec timeout strict par flux
 - Sélection et réécriture style journaliste TV via **Groq (Llama 3.3-70B, gratuit)**
 - Fallback : RSS brut si Groq indisponible
 - Fallback ultime : 5 news de démo
@@ -86,7 +86,7 @@ Sans aucune clé → mode **démo** avec 5 news simulées et fonds générés lo
 - Rendu des frames PNG via **Pillow**
 - Effet **Ken Burns** (zoom lent alterné) sur les photos pour casser l'effet figé
 - **Sous-titres animés mot par mot** (style karaoke) calés sur le vrai timing vocal capturé via edge-tts
-- Encodage H.264 et assemblage via **ffmpeg direct** (3× plus rapide que MoviePy)
+- Encodage H.264 et assemblage via **ffmpeg direct** (sans MoviePy — durées audio lues via ffprobe)
 - Export MP4 optimisé pour mobile (`+faststart`)
 
 ---
@@ -119,7 +119,7 @@ lors du découpage.
 
 | Package | Usage |
 |---------|-------|
-| `moviepy` | Lecture durée audio |
+
 | `Pillow` | Rendu des frames |
 | `numpy` | Traitement image |
 | `feedparser` | Scraping RSS |
@@ -145,6 +145,10 @@ lors du découpage.
 - [x] ✅ GitHub Actions workflow (cron 7h UTC, publication automatique)
 - [x] ✅ Publication YouTube (Data API v3)
 - [x] ✅ Publication Instagram Reels (Meta Graph API)
+- [x] ✅ Métadonnées de publication auto-générées (titre YouTube, description avec sommaire du jour, caption IG, hashtags)
+- [x] ✅ Release GitHub "latest" — URL publique stable du MP4 (téléchargement sans compte + `VIDEO_PUBLIC_URL` pour Instagram)
+- [x] ✅ Encodage CRF (qualité constante, fichiers ~10× plus légers qu'à bitrate fixe)
+- [x] ✅ Collecte RSS parallèle avec timeout par flux (plus de blocage sur un feed mort)
 - [ ] 🌍 Support multilingue (EN, ES, AR…)
 - [ ] 📊 Dashboard stats (vues, likes par vidéo)
 
