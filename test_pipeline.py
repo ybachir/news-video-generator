@@ -170,6 +170,21 @@ def test_metadata():
     print(f"    → titre : {meta['titre_video'][:60]}")
 
 
+@test("Édition Spécial Coupe du Monde (démo)")
+def test_worldcup_demo():
+    import news_video_generator as m
+    data = m._demo_worldcup(5)
+    assert len(data["news"]) == 5
+    for item in data["news"]:
+        assert item["categorie"] == "sport"
+        for field in ["titre", "resume", "source", "keywords_photo"]:
+            assert field in item, f"Champ '{field}' manquant"
+    assert "titre_video" in data and "hashtags" in data
+    meta = m.build_metadata(data, "/tmp/mondial_test.mp4")
+    assert "Coupe du Monde" in meta["titre_video"] or "⚽" in meta["titre_video"]
+    print(f"    → {meta['titre_video'][:60]}")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -268,6 +283,7 @@ def main():
     test_render_outro()
     test_palette()
     test_metadata()
+    test_worldcup_demo()
     test_espeak()
     test_wav_mp3()
     test_edge_tts_audio()
