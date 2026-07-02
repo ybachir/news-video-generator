@@ -1,5 +1,6 @@
 # ── Pipeline vidéo ──
-moviepy>=2.0.0
+# (MoviePy retiré : il ne servait qu'à lire la durée des MP3, remplacé par
+#  ffprobe — install CI ~40s plus rapide, dépendances transitives en moins)
 Pillow>=10.0.0
 numpy>=1.24.0
 

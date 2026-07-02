@@ -107,6 +107,21 @@ def text_to_wav_espeak(text: str, wav_path: str) -> bool:
     return r.returncode == 0 and os.path.exists(wav_path)
 
 
+def _audio_duration(path: str) -> float:
+    """Durée d'un fichier audio via ffprobe (remplace MoviePy, qui n'était
+    utilisé QUE pour ça — sa suppression allège l'install CI de ~40s et
+    d'une demi-douzaine de dépendances transitives)."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True
+        )
+        return float(r.stdout.strip())
+    except Exception:
+        return 0.0
+
+
 def wav_to_mp3(wav_path: str, mp3_path: str) -> bool:
     cmd = ["ffmpeg", "-y", "-i", wav_path, "-ar", "44100", "-ab", "128k", mp3_path]
     r = subprocess.run(cmd, capture_output=True, text=True)
@@ -158,13 +173,9 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
     except Exception:
         pass
 
-    try:
-        from moviepy import AudioFileClip
-        clip = AudioFileClip(mp3)
-        dur  = clip.duration
-        clip.close()
-    except Exception:
-        dur = len(text.split()) / 2.5
+    dur = _audio_duration(mp3)
+    if dur <= 0:
+        dur = len(text.split()) / 2.5   # estimation ~150 mots/min
 
     if not word_timings:
         word_timings = _estimate_word_timings(text, dur)
