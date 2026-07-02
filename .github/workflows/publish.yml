@@ -2,7 +2,7 @@ name: 📤 Publier Journal Vidéo
 
 on:
   workflow_run:
-    workflows: ["📰 Générer Journal Vidéo"]
+    workflows: ["📰 Générer Journal Vidéo", "⚽ Générer Spécial Coupe du Monde"]
     types: [completed]
 
 jobs:

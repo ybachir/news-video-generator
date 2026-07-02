@@ -1,0 +1,101 @@
+name: ⚽ Générer Spécial Coupe du Monde
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode de génération"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - demo
+
+  # 10h UTC : les matchs du Mondial 2026 (USA/Mexique/Canada) se terminent
+  # tard en UTC — à 10h, tous les résultats de la veille sont publiés dans
+  # les feeds ET les affiches du jour sont connues.
+  schedule:
+    - cron: "0 10 * * *"
+
+concurrency:
+  group: generate-worldcup
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # requis pour publier la release "worldcup-latest"
+
+jobs:
+  generate:
+    name: ⚽ Pipeline Mondial → Vidéo
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 🔧 Dépendances système
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
+
+      - name: 📦 Dépendances Python
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: ⚽ Générer (mode demo)
+        if: ${{ github.event.inputs.mode == 'demo' }}
+        run: python3 run_pipeline.py --theme worldcup --demo
+
+      - name: ⚽ Générer (mode full / cron)
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        run: python3 run_pipeline.py --theme worldcup
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mondial-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            output/*.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 🌐 Publier la release "worldcup-latest"
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MP4=$(ls output/mondial_*.mp4 | head -1)
+          cp "$MP4" mondial_latest.mp4
+          [ -f output/metadata.json ] && cp output/metadata.json . || echo '{}' > metadata.json
+          gh release delete worldcup-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create worldcup-latest mondial_latest.mp4 metadata.json \
+            --title "⚽ Spécial Mondial du $(date '+%d/%m/%Y')" \
+            --notes "Édition Spécial Coupe du Monde 2026 générée le $(date '+%d/%m/%Y à %H:%M UTC').
+
+          **Téléchargement direct :** [mondial_latest.mp4](https://github.com/${{ github.repository }}/releases/download/worldcup-latest/mondial_latest.mp4)"
+          echo "✅ https://github.com/${{ github.repository }}/releases/download/worldcup-latest/mondial_latest.mp4"
+
+      - name: 📊 Résumé
+        if: always()
+        run: |
+          echo "## ⚽ Spécial Coupe du Monde — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls output/*.mp4 2>/dev/null | grep -q mp4; then
+            SIZE=$(du -sh output/*.mp4 2>/dev/null | cut -f1)
+            echo "| Taille vidéo | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            echo "🌐 **Téléchargement : [mondial_latest.mp4](https://github.com/${{ github.repository }}/releases/download/worldcup-latest/mondial_latest.mp4)**" >> $GITHUB_STEP_SUMMARY
+          fi
