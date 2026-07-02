@@ -116,7 +116,10 @@ Voici {len(articles)} articles RSS bruts :
 {articles_txt}
 
 Sélectionne les {n} actualités les plus importantes et variées.
-Réécris chaque résumé en style journaliste TV (2-3 phrases, 40-55 mots, factuel, dynamique, concis).
+Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran). Règles impératives :
+- Le résumé doit être 100% autonome à l'oral : la PREMIÈRE phrase nomme clairement le sujet (pays, personne, institution).
+- 2-3 phrases courtes sujet-verbe-complément, 45-60 mots, factuel, rythme de présentateur.
+- Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
 RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
 - Jamais de plages ou scores avec tiret : écris "2 à 1", "de 10 à 15" — jamais "2-1" ni "10-15"
@@ -134,7 +137,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
-      "resume": "Résumé journaliste TV 40-55 mots",
+      "resume": "Résumé oral autonome 45-60 mots (première phrase = le sujet nommé)",
       "source": "Nom du média",
       "categorie": "politique|economie|science|technologie|sport|culture|environnement|societe|monde",
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]

@@ -83,7 +83,11 @@ Construis une émission "Spécial Coupe du Monde" de 5 segments, EN PRIORISANT l
 - Segment 5 : LA STAT — une statistique marquante, un record ou un joueur en vue du tournoi (uniquement si présent dans les articles).
 Si les articles ne couvrent pas assez la Coupe du Monde, complète avec les actualités football les plus importantes en le disant clairement.
 
-Style : journaliste sportif TV, dynamique, précis, 40-55 mots par résumé. Titres courts et percutants (max 8 mots, ex: "France 2 à 1 Brésil : qualification arrachée").
+Style : journaliste sportif TV, dynamique, précis. IMPORTANT : le résumé sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran) — il doit donc être 100% autonome à l'oral :
+- La PREMIÈRE phrase nomme les équipes/le joueur et donne le fait principal (ex: "La France a renversé le Brésil deux buts à un en quart de finale.").
+- 2-3 phrases courtes sujet-verbe-complément, 45-60 mots, écris les scores en toutes lettres dans le résumé ("deux buts à un").
+- Interdits : style télégraphique, phrases nominales, débuter par un pronom ou une référence vague.
+Titres courts et percutants pour l'écran (max 8 mots, ex: "France 2 à 1 Brésil : qualification arrachée").
 
 RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
 - Scores TOUJOURS avec "à" : "2 à 1", "3 à 0" — JAMAIS "2-1" ni "2:1"
@@ -101,7 +105,7 @@ Réponds UNIQUEMENT avec ce JSON :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
-      "resume": "Résumé journaliste sportif TV 40-55 mots",
+      "resume": "Résumé oral autonome 45-60 mots (première phrase = équipes + fait principal)",
       "source": "Nom du média",
       "categorie": "sport",
       "keywords_photo": ["keyword1", "keyword2", "keyword3"]
