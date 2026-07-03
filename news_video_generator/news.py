@@ -131,11 +131,12 @@ RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse voca
 - Noms de pays et d'institutions en toutes lettres : "République démocratique du Congo" (jamais "RD Congo"), "États-Unis" (jamais "USA")
 - Aucun sigle ni abréviation non lexicalisé, "contre" au lieu de "vs"
 
-Pour keywords_photo : choisis des mots-clés VISUELS et GÉNÉRIQUES adaptés à une
-recherche sur banque d'images (ex: "stadium", "courtroom", "hospital", "protest",
-"skyline", "factory", "soldiers") plutôt que des noms de pays ou de personnes précis,
-qui renvoient souvent aucun résultat. Le premier mot-clé doit être le plus
-représentatif visuellement du sujet.
+Pour photo_query : décris en anglais LA SCÈNE PRÉCISE qu'on devrait voir à l'écran
+pour ce sujet (3-6 mots, lieu/objet/action CONCRETS et photographiables) :
+- ✅ "european parliament chamber interior", "container ship port cranes",
+  "wildfire smoke forest aerial", "stock exchange trading screens"
+- ❌ concepts abstraits ("economy", "tension"), noms de personnes, mots génériques ("news")
+Pour keywords_photo : 3 mots-clés anglais de repli, du plus spécifique au plus général.
 
 Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
 {{
@@ -145,6 +146,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "resume": "Résumé oral autonome 45-60 mots (première phrase = le sujet nommé)",
       "source": "Nom du média",
       "categorie": "politique|economie|science|technologie|sport|culture|environnement|societe|monde",
+      "photo_query": "scène précise en anglais 3-6 mots",
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],

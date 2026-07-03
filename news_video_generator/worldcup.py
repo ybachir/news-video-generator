@@ -95,10 +95,8 @@ RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse voca
 - Noms de pays en toutes lettres : "République démocratique du Congo" (jamais "RD Congo"), "États-Unis" (jamais "USA")
 - Aucun sigle ni abréviation non lexicalisé, "contre" au lieu de "vs"
 
-Pour keywords_photo : mots-clés anglais TRÈS VISUELS de football, dans cet esprit :
-"soccer stadium floodlights", "football fans celebrating flags", "soccer player celebration",
-"goalkeeper diving save", "soccer ball goal net", "world cup trophy gold", "penalty kick".
-Le premier mot-clé doit capturer l'AMBIANCE du segment (victoire → célébration, affiche → stade plein, stat → action de jeu). Jamais de noms de joueurs ou de pays dans les keywords.
+Pour photo_query : décris en anglais LA SCÈNE football PRÉCISE à montrer (3-6 mots) qui capture l'AMBIANCE du segment : victoire → "football fans celebrating flags stadium", affiche → "packed soccer stadium night floodlights", stat/joueur → "soccer player goal celebration" ou "goalkeeper diving save action". Jamais de noms de joueurs ou de pays.
+Pour keywords_photo : 3 mots-clés anglais football de repli, du plus spécifique au plus général.
 
 Réponds UNIQUEMENT avec ce JSON :
 {{
@@ -108,6 +106,7 @@ Réponds UNIQUEMENT avec ce JSON :
       "resume": "Résumé oral autonome 45-60 mots (première phrase = équipes + fait principal)",
       "source": "Nom du média",
       "categorie": "sport",
+      "photo_query": "scène football précise 3-6 mots",
       "keywords_photo": ["keyword1", "keyword2", "keyword3"]
     }}
   ],

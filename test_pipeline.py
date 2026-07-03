@@ -218,6 +218,23 @@ def test_subtitles_ass():
     print(f"    → {len(words)} mots, {content.count('Dialogue:')} évènements ASS")
 
 
+@test("Filtrage photos (scoring lexical + cascade)")
+def test_photo_scoring():
+    from news_video_generator.photos import _score_candidate, _filter_sensitive_keywords
+    photo_ok = {"alt_description": "european parliament chamber during session",
+                "description": None,
+                "tags": [{"title": "parliament"}, {"title": "politics"}]}
+    photo_ko = {"alt_description": "cup of coffee on wooden table",
+                "description": None, "tags": [{"title": "coffee"}]}
+    wanted = {"european", "parliament", "chamber", "interior"}
+    s_ok, s_ko = _score_candidate(photo_ok, wanted), _score_candidate(photo_ko, wanted)
+    assert s_ok > s_ko, (s_ok, s_ko)
+    assert s_ok >= 0.5
+    assert _score_candidate({"alt_description": None, "tags": []}, wanted) == 0.0
+    assert _filter_sensitive_keywords(["stadium", "war", "protest"]) == ["stadium"]
+    print(f"    → pertinent={s_ok:.2f} vs hors-sujet={s_ko:.2f}")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -318,6 +335,7 @@ def main():
     test_metadata()
     test_worldcup_demo()
     test_subtitles_ass()
+    test_photo_scoring()
     test_speech()
     test_espeak()
     test_wav_mp3()
