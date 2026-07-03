@@ -112,6 +112,11 @@ def main():
         CONFIG.setdefault("EDITION_STYLE",  "worldcup")   # intro ballon + tricolore
         script_data = get_worldcup_news(CONFIG)
     else:
+        # Identité "nouvelle génération" : positionnement des chaînes d'actu
+        # les plus vues (l'essentiel, rapide, accessible) — design original
+        CONFIG.setdefault("EDITION_TOP",    "L'ESSENTIEL")
+        CONFIG.setdefault("EDITION_BOTTOM", "DE L'ACTU")
+        CONFIG.setdefault("EDITION_BRAND",  "L'ESSENTIEL DE L'ACTU")
         script_data = get_news(CONFIG)
     if not script_data.get("news"):
         print("❌ Aucune news disponible.")

@@ -110,15 +110,20 @@ def structure_with_groq(articles: list[dict], api_key: str, n: int) -> dict | No
         for i, a in enumerate(articles)
     )
 
-    prompt = f"""Tu es un journaliste TV professionnel. Nous sommes le {today}.
+    prompt = f"""Tu es le rédacteur en chef d'un média d'actualité nouvelle génération sur YouTube et TikTok, dans l'esprit des chaînes d'info les plus vues de France : RAPIDE, FACILE, ACCESSIBLE. Ton public a 15-35 ans. Nous sommes le {today}.
 
 Voici {len(articles)} articles RSS bruts :
 {articles_txt}
 
-Sélectionne les {n} actualités les plus importantes et variées.
+Sélectionne les {n} actualités les plus importantes et variées, et ORDONNE-LES comme les grandes chaînes d'actu YouTube :
+- L'actu la PLUS importante du jour en premier (c'est l'accroche qui retient le spectateur).
+- Si possible, termine par une note plus légère ou positive (culture, science, sport, bonne nouvelle).
 Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran). Règles impératives :
 - Le résumé doit être 100% autonome à l'oral : la PREMIÈRE phrase nomme clairement le sujet (pays, personne, institution).
 - 2-3 phrases courtes sujet-verbe-complément, 45-60 mots, factuel, rythme de présentateur.
+- TON "rapide, facile, accessible" : vocabulaire courant, zéro jargon. Si un terme technique est indispensable, explique-le en quelques mots dans la foulée ("l'euro numérique, c'est-à-dire une version électronique de la monnaie...").
+- Donne le contexte essentiel en une demi-phrase quand il le faut ("pour rappel, ...").
+- Neutre et factuel, aucune opinion.
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
 RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
@@ -143,9 +148,9 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],
-  "intro": "Accroche d'ouverture dynamique (15 mots max)",
-  "outro": "Phrase de clôture (10 mots max)",
-  "titre_video": "Titre YouTube accrocheur (max 90 caractères, avec la date {today})",
+  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'essentiel du jour (ex: 'Voici l'essentiel de l'actu de ce {today}, en trois minutes.')",
+  "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'essentiel du jour. On se retrouve demain.')",
+  "titre_video": "Titre YouTube au format des chaînes d'actu : 'Sujet 1, sujet 2, sujet 3… Les {n} actus du jour ({today})' — max 95 caractères, sujets en 1-3 mots chacun",
   "hashtags": ["actualités", "5 à 8 hashtags français SANS le symbole #"]
 }}"""
 
@@ -224,9 +229,9 @@ def get_news(config: dict) -> dict:
         date_str = date_fr(datetime.now())
         return {
             "news":  news,
-            "intro": f"Bonjour, voici les {len(news)} actualités du {date_str}.",
-            "outro": "Restez informés. À très bientôt.",
-            "titre_video": f"Journal du Monde — {date_fr(datetime.now(), with_weekday=False)}",
+            "intro": f"Voici l'essentiel de l'actu du {date_str}, en trois minutes.",
+            "outro": "C'était l'essentiel du jour. On se retrouve demain.",
+            "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
             "hashtags": ["actualités", "journal", "news", "monde", "information"],
         }
 
@@ -246,8 +251,8 @@ def _demo_news(n: int) -> dict:
     news = [{"titre": t[0], "resume": t[1], "source": t[2], "categorie": t[3], "keywords_photo": t[4]} for t in topics[:n]]
     return {
         "news":  news,
-        "intro": f"Bienvenue dans votre journal du {date_fr(datetime.now(), with_weekday=False)}.",
-        "outro": "Merci de votre fidélité. À demain.",
-        "titre_video": f"Journal du Monde — {date_fr(datetime.now(), with_weekday=False)}",
+        "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en trois minutes.",
+        "outro": "C'était l'essentiel du jour. On se retrouve demain.",
+        "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
         "hashtags": ["actualités", "journal", "news", "monde", "information"],
     }

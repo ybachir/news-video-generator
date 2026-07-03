@@ -192,19 +192,21 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
 # La virgule finale fait toute la différence : la voix marque une courte
 # respiration puis ENCHAÎNE sur le titre ("À la une, France 2 à 1 Brésil")
 # au lieu de deux phrases hachées ("À la une. France...").
+# Ton des chaînes d'actu YouTube les plus vues : "on" collectif, direct,
+# conversationnel — "On commence", "On continue", "Et on termine avec".
 _MIDDLE_TRANSITIONS = [
-    "On enchaîne,",
-    "Par ailleurs,",
-    "Autre actualité,",
-    "Également au programme,",
+    "On continue,",
+    "Autre actu importante,",
+    "On passe à la suite,",
+    "Également aujourd'hui,",
 ]
 
 
 def _transition(n: int, total: int) -> str:
     if n == 1:
-        return "À la une,"
+        return "On commence,"
     if n == total:
-        return "Et pour finir,"
+        return "Et on termine avec ceci,"
     return _MIDDLE_TRANSITIONS[(n - 2) % len(_MIDDLE_TRANSITIONS)]
 
 

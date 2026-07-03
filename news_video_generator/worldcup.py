@@ -83,7 +83,7 @@ Construis une émission "Spécial Coupe du Monde" de 5 segments, EN PRIORISANT l
 - Segment 5 : LA STAT — une statistique marquante, un record ou un joueur en vue du tournoi (uniquement si présent dans les articles).
 Si les articles ne couvrent pas assez la Coupe du Monde, complète avec les actualités football les plus importantes en le disant clairement.
 
-Style : journaliste sportif TV, dynamique, précis. IMPORTANT : le résumé sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran) — il doit donc être 100% autonome à l'oral :
+Style : média sport nouvelle génération YouTube/TikTok — RAPIDE, FACILE, ACCESSIBLE, ton direct pour un public de 15-35 ans, zéro jargon tactique non expliqué. IMPORTANT : le résumé sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran) — il doit donc être 100% autonome à l'oral :
 - La PREMIÈRE phrase nomme les équipes/le joueur et donne le fait principal (ex: "La France a renversé le Brésil deux buts à un en quart de finale.").
 - 2-3 phrases courtes sujet-verbe-complément, 45-60 mots, écris les scores en toutes lettres dans le résumé ("deux buts à un").
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ou une référence vague.

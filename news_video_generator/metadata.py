@@ -24,13 +24,13 @@ def build_metadata(script_data: dict, video_path: str) -> dict:
     hashtags = [h.lstrip("#").strip() for h in hashtags if h.strip()][:10]
 
     titre_video = (script_data.get("titre_video")
-                   or f"Journal du Monde — {date_str}")[:95]
+                   or f"Les actus du jour — {date_str}")[:95]
 
     # Description YouTube : sommaire réel du jour → meilleur SEO,
     # description unique chaque jour (YouTube pénalise le contenu dupliqué)
     lignes_sommaire = "\n".join(f"  {i}. {t}" for i, t in enumerate(titres, 1))
     description = (
-        f"📰 Journal du Monde — {date_str}\n\n"
+        f"📰 L'essentiel de l'actu — {date_str}\n\n"
         f"Au sommaire aujourd'hui :\n{lignes_sommaire}\n\n"
         f"L'essentiel de l'actualité mondiale en 3 minutes, tous les jours.\n\n"
         + " ".join(f"#{h.replace(' ', '')}" for h in hashtags)
@@ -38,7 +38,7 @@ def build_metadata(script_data: dict, video_path: str) -> dict:
 
     # Caption Instagram : plus courte, hashtags en fin
     caption = (
-        f"📰 Journal du Monde — {date_str}\n\n"
+        f"📰 L'essentiel de l'actu — {date_str}\n\n"
         + "\n".join(f"▪️ {t}" for t in titres[:5])
         + "\n\n⏱️ L'essentiel en 3 minutes\n\n"
         + " ".join(f"#{h.replace(' ', '')}" for h in hashtags)
