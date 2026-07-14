@@ -192,22 +192,24 @@ def make_audio(text: str, name: str, audio_dir: Path) -> tuple[str | None, float
 # La virgule finale fait toute la différence : la voix marque une courte
 # respiration puis ENCHAÎNE sur le titre ("À la une, France 2 à 1 Brésil")
 # au lieu de deux phrases hachées ("À la une. France...").
-# Ton des chaînes d'actu YouTube les plus vues : "on" collectif, direct,
-# conversationnel — "On commence", "On continue", "Et on termine avec".
-_MIDDLE_TRANSITIONS = [
-    "On continue,",
-    "Autre actu importante,",
-    "On passe à la suite,",
-    "Également aujourd'hui,",
-]
+# Filet de sécurité UNIQUEMENT (mode démo / Groq indisponible) : dans le
+# cas normal, la transition de CHAQUE sujet est écrite par Groq, qui voit
+# tous les titres du jour et rebondit sur le contenu réel — un vrai
+# présentateur ne répète jamais "On commence / On continue" avec la même
+# formule chaque jour, il varie selon ce qui vient d'être dit (pivot
+# géographique, pivot de ton, lien thématique...).
+_FALLBACK_OPENERS = ["On commence tout de suite avec", "Premier sujet du jour,", "On démarre avec"]
+_FALLBACK_MIDDLE   = ["Autre sujet,", "On continue avec", "Toujours dans l'actualité,",
+                      "Changement de registre,", "Direction maintenant"]
+_FALLBACK_CLOSERS  = ["Et pour terminer,", "On finit avec", "Dernier sujet du jour,"]
 
 
-def _transition(n: int, total: int) -> str:
+def _fallback_transition(n: int, total: int) -> str:
     if n == 1:
-        return "On commence,"
+        return _FALLBACK_OPENERS[n % len(_FALLBACK_OPENERS)]
     if n == total:
-        return "Et on termine avec ceci,"
-    return _MIDDLE_TRANSITIONS[(n - 2) % len(_MIDDLE_TRANSITIONS)]
+        return _FALLBACK_CLOSERS[n % len(_FALLBACK_CLOSERS)]
+    return _FALLBACK_MIDDLE[n % len(_FALLBACK_MIDDLE)]
 
 
 def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list[dict]:
@@ -236,8 +238,10 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
         # La voix ne lit PLUS le titre : un titre est télégraphique, fait
         # pour l'écran (où il reste affiché), pas pour la bouche — aucun
         # présentateur ne lit son bandeau. La voix raconte : transition
-        # naturelle + résumé écrit pour l'oreille (voir prompts Groq).
-        text = f"{_transition(n, total)} {item['resume']}"
+        # ÉCRITE PAR GROQ (contextuelle au sujet réel, jamais figée) +
+        # résumé écrit pour l'oreille (voir prompts Groq).
+        transition = (item.get("transition") or "").strip() or _fallback_transition(n, total)
+        text = f"{transition} {item['resume']}"
         mp3, dur, engine, words = make_audio(text, f"news_{n:02d}", audio_dir)
         engines_used.append(engine)
         segments.append({

@@ -89,6 +89,8 @@ Style : média sport nouvelle génération YouTube/TikTok — RAPIDE, FACILE, AC
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ou une référence vague.
 Titres courts et percutants pour l'écran (max 8 mots, ex: "France 2 à 1 Brésil : qualification arrachée").
 
+Pour transition : la phrase d'ACCROCHE ORALE dite juste AVANT le résumé (2-6 mots + virgule), qui rebondit sur le CONTENU réel — jamais "On commence"/"On continue" répété mécaniquement. Varie selon la nature du bloc : résultats → ("Score choc hier soir,", "Autre résultat de la journée,"), affiches du jour → ("Changement de registre, place aux prochaines affiches,", "On regarde maintenant vers ce soir,"), stat → ("Terminons avec un chiffre qui parle,"). Le tout premier segment peut ouvrir directement ("Grosse ambiance hier pour ce match,") sans jamais dire littéralement "On commence,".
+
 RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
 - Scores TOUJOURS avec "à" : "2 à 1", "3 à 0" — JAMAIS "2-1" ni "2:1"
 - Séances de tirs au but : "4 à 2 aux tirs au but" — jamais "t.a.b."
@@ -103,6 +105,7 @@ Réponds UNIQUEMENT avec ce JSON :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
+      "transition": "Accroche orale contextuelle avant ce sujet (2-6 mots + virgule)",
       "resume": "Résumé oral autonome 45-60 mots (première phrase = équipes + fait principal)",
       "source": "Nom du média",
       "categorie": "sport",
@@ -198,23 +201,28 @@ def get_worldcup_news(config: dict) -> dict:
 def _demo_worldcup(n: int) -> dict:
     topics = [
         ("France 2 à 1 Brésil : qualification arrachée",
-         "Les Bleus renversent le Brésil en quart de finale grâce à un doublé dans les vingt dernières minutes. Un match d'une intensité rare, conclu dans une ambiance électrique au MetLife Stadium.",
+         "Grosse ambiance hier soir au MetLife Stadium,",
+         "Les Bleus renversent le Brésil en quart de finale grâce à un doublé dans les vingt dernières minutes. Un match d'une intensité rare, conclu dans une ambiance électrique.",
          "L'Équipe", ["football fans celebrating flags", "soccer stadium floodlights", "celebration"]),
         ("Espagne-Argentine, choc des demi-finales",
-         "L'affiche du jour oppose deux géants du football mondial. L'Espagne, invaincue depuis quatorze matchs, défie l'Argentine tenante du titre. Coup d'envoi ce soir dans un stade à guichets fermés.",
+         "Changement de registre, place aux prochaines affiches,",
+         "L'Espagne, invaincue depuis quatorze matchs, défie l'Argentine tenante du titre ce soir. Coup d'envoi prévu dans un stade à guichets fermés.",
          "RMC Sport", ["soccer stadium full crowd", "football pitch night", "stadium"]),
         ("Le Maroc continue de surprendre",
-         "Nouvelle sensation du tournoi, le Maroc s'est qualifié pour le dernier carré après une séance de tirs au but héroïque. Son gardien, auteur de trois arrêts, devient l'homme du Mondial.",
+         "Direction maintenant l'Afrique, où le Maroc fait toujours sensation,",
+         "Le Maroc s'est qualifié pour le dernier carré après une séance de tirs au but héroïque. Son gardien, auteur de trois arrêts, devient l'homme du Mondial.",
          "France24", ["goalkeeper diving save", "soccer goal net", "football"]),
         ("Dix buts : record en vue",
-         "Avec dix réalisations depuis le début de la compétition, l'attaquant vedette n'est plus qu'à trois longueurs du record historique de Just Fontaine, établi en 1958. Une performance exceptionnelle.",
+         "Terminons avec un chiffre qui parle,",
+         "Avec dix réalisations depuis le début de la compétition, l'attaquant vedette n'est plus qu'à trois longueurs du record historique de Just Fontaine, établi en 1958.",
          "BBC Sport", ["soccer player celebration", "soccer ball goal", "football action"]),
         ("La finale se jouera à New York",
-         "Le MetLife Stadium accueillera la finale dimanche devant 82 000 spectateurs. Les organisateurs annoncent un dispositif exceptionnel et une cérémonie de clôture inédite pour ce Mondial nord-américain.",
+         "Et pour finir, une info logistique importante,",
+         "Le MetLife Stadium accueillera la finale dimanche devant 82 000 spectateurs. Les organisateurs annoncent un dispositif exceptionnel pour ce Mondial nord-américain.",
          "FIFA", ["world cup trophy gold", "stadium aerial view", "soccer"]),
     ]
-    news = [{"titre": t[0], "resume": t[1], "source": t[2],
-             "categorie": "sport", "keywords_photo": t[3]} for t in topics[:n]]
+    news = [{"titre": t[0], "transition": t[1], "resume": t[2], "source": t[3],
+             "categorie": "sport", "keywords_photo": t[4]} for t in topics[:n]]
     return {
         "news":  news,
         "intro": "Bienvenue dans votre Spécial Coupe du Monde, résultats, affiches et stats du jour.",

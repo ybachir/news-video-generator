@@ -126,6 +126,12 @@ Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le t
 - Neutre et factuel, aucune opinion.
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
+Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale). Elle doit :
+- Rebondir sur le CONTENU réel, jamais une formule mécanique répétée ("On commence"/"On continue" à chaque sujet = interdit).
+- Varier son type d'un sujet à l'autre dans la MÊME vidéo : pivot géographique ("Direction le Brésil,", "En France maintenant,"), pivot thématique ("Toujours question de climat,"), pivot de ton ("Ambiance très différente pour ce dernier sujet,"), ou simple enchaînement neutre ("Autre actualité qui a marqué la journée,").
+- Le tout premier sujet peut être une accroche d'ouverture directe ("Premier sujet ce {today},", "On démarre avec une actualité majeure,") — jamais littéralement "On commence,".
+- Le dernier sujet peut signaler la fin ("Et pour terminer,", "On finit sur une note plus légère,") SANS que ce soit obligatoire ni identique d'une vidéo à l'autre.
+
 RÈGLES D'ÉCRITURE ORALE (le texte sera LU À VOIX HAUTE par une synthèse vocale) :
 - Jamais de plages ou scores avec tiret : écris "2 à 1", "de 10 à 15" — jamais "2-1" ni "10-15"
 - Noms de pays et d'institutions en toutes lettres : "République démocratique du Congo" (jamais "RD Congo"), "États-Unis" (jamais "USA")
@@ -143,6 +149,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
+      "transition": "Accroche orale contextuelle avant ce sujet (2-6 mots + virgule)",
       "resume": "Résumé oral autonome 45-60 mots (première phrase = le sujet nommé)",
       "source": "Nom du média",
       "categorie": "politique|economie|science|technologie|sport|culture|environnement|societe|monde",
@@ -244,13 +251,18 @@ def get_news(config: dict) -> dict:
 
 def _demo_news(n: int) -> dict:
     topics = [
-        ("Sommet climatique international", "Les dirigeants mondiaux se réunissent pour discuter de nouvelles mesures contre le changement climatique. Des engagements ambitieux sont attendus lors de cette session extraordinaire.", "ONU", "environnement", ["climate", "summit", "earth"]),
-        ("Percée en intelligence artificielle", "Des chercheurs annoncent une avancée majeure en IA générale. Cette technologie pourrait transformer la médecine, l'éducation et l'industrie dans les prochaines années.", "MIT Tech", "technologie", ["artificial", "intelligence", "robot"]),
-        ("Tensions géopolitiques en Europe", "La diplomatie internationale s'intensifie face aux nouvelles tensions régionales. Des pourparlers d'urgence sont en cours entre les principales puissances.", "Reuters", "politique", ["diplomacy", "europe", "politics"]),
-        ("Marchés financiers en turbulences", "Les bourses mondiales enregistrent de fortes fluctuations suite aux annonces des banques centrales sur les taux d'intérêt.", "Bloomberg", "economie", ["stock", "market", "finance"]),
-        ("Découverte scientifique sur Mars", "La NASA confirme la présence de traces organiques sous la surface martienne, relançant le débat sur la vie extraterrestre.", "NASA", "science", ["mars", "space", "discovery"]),
+        ("Sommet climatique international", "Premier sujet ce jour, un rendez-vous international majeur,",
+         "Les dirigeants mondiaux se réunissent pour discuter de nouvelles mesures contre le changement climatique. Des engagements ambitieux sont attendus lors de cette session extraordinaire.", "ONU", "environnement", ["climate", "summit", "earth"]),
+        ("Percée en intelligence artificielle", "Du côté de la science maintenant,",
+         "Des chercheurs annoncent une avancée majeure en IA générale. Cette technologie pourrait transformer la médecine, l'éducation et l'industrie dans les prochaines années.", "MIT Tech", "technologie", ["artificial", "intelligence", "robot"]),
+        ("Tensions géopolitiques en Europe", "En Europe maintenant,",
+         "La diplomatie internationale s'intensifie face aux nouvelles tensions régionales. Des pourparlers d'urgence sont en cours entre les principales puissances.", "Reuters", "politique", ["diplomacy", "europe", "politics"]),
+        ("Marchés financiers en turbulences", "Du côté de l'économie,",
+         "Les bourses mondiales enregistrent de fortes fluctuations suite aux annonces des banques centrales sur les taux d'intérêt.", "Bloomberg", "economie", ["stock", "market", "finance"]),
+        ("Découverte scientifique sur Mars", "Et pour terminer sur une note plus légère,",
+         "La NASA confirme la présence de traces organiques sous la surface martienne, relançant le débat sur la vie extraterrestre.", "NASA", "science", ["mars", "space", "discovery"]),
     ]
-    news = [{"titre": t[0], "resume": t[1], "source": t[2], "categorie": t[3], "keywords_photo": t[4]} for t in topics[:n]]
+    news = [{"titre": t[0], "transition": t[1], "resume": t[2], "source": t[3], "categorie": t[4], "keywords_photo": t[5]} for t in topics[:n]]
     return {
         "news":  news,
         "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en trois minutes.",
