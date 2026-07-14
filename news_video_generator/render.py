@@ -311,16 +311,9 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
 
     # ── Barre top ──
     draw.rectangle([0, 0, W, 5], fill=(*PALETTE["gold"], 255))
-    # Date dans une pilule (photo désormais pleine luminosité : un texte
-    # gris nu deviendrait illisible sur un ciel clair)
-    now = datetime.now().strftime("%d/%m/%Y  %H:%M")
-    nb  = draw.textbbox((0, 0), now, font=fonts["regular_xs"])
-    nw_ = nb[2] - nb[0]
-    draw.rounded_rectangle([W // 2 - nw_ // 2 - 18, 14,
-                            W // 2 + nw_ // 2 + 18, 48],
-                           radius=17, fill=(*PALETTE["bg2"], 200))
-    draw.text((W // 2, 30), now,
-              font=fonts["regular_xs"], fill=(*PALETTE["gray"], 230), anchor="mm")
+    # Date centrale supprimée (demande utilisateur) : le tag catégorie
+    # (haut droite) et le badge numéro (haut gauche) suffisent, le haut
+    # de l'image reste dégagé sur la photo.
 
     # ── Badge numéro (cercle doré avec ombre portée, plus de profondeur) ──
     n  = seg["index"]
