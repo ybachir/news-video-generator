@@ -57,14 +57,47 @@ def humanize_for_speech(text: str) -> str:
     return out.strip()
 
 
+# ── Garde-fou : cohérence des transitions générées par Groq ──
+# Un mot de PIVOT ("cette fois", "Direction...", "changement de registre")
+# n'a de sens que si le sujet précédent était vraiment différent. Le
+# prompt le demande déjà à Groq, mais on vérifie aussi en code : si le
+# sujet i partage le même "pays" (journal) ou "bloc" (Mondial) que le
+# sujet i-1 et que la transition contient quand même un marqueur de
+# changement, on la remplace par un connecteur neutre — sans nommer le
+# pays pour éviter tout problème de genre/préposition ("en/au/aux").
+_CONTRAST_MARKERS = re.compile(
+    r"\bcette fois\b|\bdirection\b|\bchangement de registre\b|\bà présent\b",
+    re.IGNORECASE,
+)
+_NEUTRAL_FALLBACKS = [
+    "Toujours dans le même registre,",
+    "Autre actualité sur ce même sujet,",
+    "On reste sur ce terrain,",
+    "Également à noter,",
+]
+
+
+def _enforce_transition_coherence(script_data: dict) -> dict:
+    """Corrige les transitions qui prétendraient à tort changer de sujet."""
+    news = script_data.get("news", [])
+    for i in range(1, len(news)):
+        prev_ctx = news[i - 1].get("pays") or news[i - 1].get("bloc")
+        cur_ctx  = news[i].get("pays") or news[i].get("bloc")
+        transition = news[i].get("transition", "")
+        if prev_ctx and cur_ctx and prev_ctx == cur_ctx and _CONTRAST_MARKERS.search(transition):
+            news[i]["transition"] = _NEUTRAL_FALLBACKS[i % len(_NEUTRAL_FALLBACKS)]
+    return script_data
+
+
 def humanize_script(script_data: dict) -> dict:
     """Applique la normalisation à tout le script (intro, outro, titres,
-    résumés) — modifie le dict en place et le retourne."""
+    résumés, transitions) — modifie le dict en place et le retourne."""
+    script_data = _enforce_transition_coherence(script_data)
     for key in ("intro", "outro"):
         if script_data.get(key):
             script_data[key] = humanize_for_speech(script_data[key])
     for item in script_data.get("news", []):
-        for key in ("titre", "resume"):
+        for key in ("titre", "resume", "transition"):
             if item.get(key):
                 item[key] = humanize_for_speech(item[key])
     return script_data

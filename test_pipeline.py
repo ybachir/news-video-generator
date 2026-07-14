@@ -235,6 +235,20 @@ def test_photo_scoring():
     print(f"    → pertinent={s_ok:.2f} vs hors-sujet={s_ko:.2f}")
 
 
+@test("Cohérence des transitions (garde-fou faux pivot pays/bloc)")
+def test_transition_coherence():
+    from news_video_generator.speech import _enforce_transition_coherence
+    data = {"news": [
+        {"pays": "France", "transition": "Premier sujet ce 14 juillet,"},
+        {"pays": "France", "transition": "En France cette fois, les incendies inquiètent,"},
+        {"pays": "Brésil", "transition": "Direction le Brésil,"},
+    ]}
+    fixed = _enforce_transition_coherence(data)
+    assert "cette fois" not in fixed["news"][1]["transition"], "faux pivot France→France non corrigé"
+    assert "Direction" in fixed["news"][2]["transition"], "vrai pivot France→Brésil supprimé à tort"
+    print(f"    → corrigé : \"{fixed['news'][1]['transition']}\"")
+
+
 # ── Audio ──────────────────────────────────────────────────────
 
 @test("espeak-ng — génération WAV")
@@ -336,6 +350,7 @@ def main():
     test_worldcup_demo()
     test_subtitles_ass()
     test_photo_scoring()
+    test_transition_coherence()
     test_speech()
     test_espeak()
     test_wav_mp3()

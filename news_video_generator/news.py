@@ -126,9 +126,16 @@ Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le t
 - Neutre et factuel, aucune opinion.
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
-Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale). Elle doit :
-- Rebondir sur le CONTENU réel, jamais une formule mécanique répétée ("On commence"/"On continue" à chaque sujet = interdit).
-- Varier son type d'un sujet à l'autre dans la MÊME vidéo : pivot géographique ("Direction le Brésil,", "En France maintenant,"), pivot thématique ("Toujours question de climat,"), pivot de ton ("Ambiance très différente pour ce dernier sujet,"), ou simple enchaînement neutre ("Autre actualité qui a marqué la journée,").
+Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale).
+
+RÈGLE DE COHÉRENCE (la plus importante — vérifie-la sujet par sujet) : compare CE sujet au sujet qui le précède immédiatement dans ta liste (utilise le champ "pays" que tu vas toi-même renseigner pour chaque sujet).
+- N'utilise un mot qui annonce un CHANGEMENT ("cette fois", "maintenant", "Direction...", "Changement de registre") QUE si le pays, le lieu ou le thème a VRAIMENT changé par rapport au sujet précédent.
+- Erreur à ne jamais commettre : si le sujet précédent parlait déjà de la France, n'écris pas "En France cette fois," pour le sujet suivant — "cette fois" implique à tort qu'on vient de quitter un autre endroit. Écris plutôt un connecteur additif : "Toujours en France,", "Autre actualité française,", "Également dans le pays,".
+- Si le sujet précédent parlait d'un autre pays/thème et que celui-ci change vraiment de sujet, LÀ le pivot géographique/thématique est justifié ("Direction le Brésil,", "Changement de registre,").
+- En cas de doute, préfère un connecteur neutre qui ne prétend rien sur la continuité ("Autre actualité qui a marqué la journée,", "On note aussi,") plutôt qu'un faux pivot.
+
+Autres règles :
+- Jamais une formule mécanique répétée à l'identique ("On commence"/"On continue" à chaque sujet = interdit).
 - Le tout premier sujet peut être une accroche d'ouverture directe ("Premier sujet ce {today},", "On démarre avec une actualité majeure,") — jamais littéralement "On commence,".
 - Le dernier sujet peut signaler la fin ("Et pour terminer,", "On finit sur une note plus légère,") SANS que ce soit obligatoire ni identique d'une vidéo à l'autre.
 
@@ -149,6 +156,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
   "news": [
     {{
       "titre": "Titre court percutant (max 8 mots)",
+      "pays": "Pays principal concerné par ce sujet (ex: \"France\", \"États-Unis\") ou \"International\" si aucun pays unique ne domine",
       "transition": "Accroche orale contextuelle avant ce sujet (2-6 mots + virgule)",
       "resume": "Résumé oral autonome 45-60 mots (première phrase = le sujet nommé)",
       "source": "Nom du média",
@@ -230,6 +238,7 @@ def get_news(config: dict) -> dict:
             words = [w for w in a["titre_brut"].split() if len(w) > 4][:3]
             news.append({
                 "titre":          a["titre_brut"][:80],
+                "pays":           "International",
                 "resume":         a["desc_brute"][:200],
                 "source":         a["source"],
                 "categorie":      "monde",
@@ -251,18 +260,18 @@ def get_news(config: dict) -> dict:
 
 def _demo_news(n: int) -> dict:
     topics = [
-        ("Sommet climatique international", "Premier sujet ce jour, un rendez-vous international majeur,",
+        ("Sommet climatique international", "International", "Premier sujet ce jour, un rendez-vous international majeur,",
          "Les dirigeants mondiaux se réunissent pour discuter de nouvelles mesures contre le changement climatique. Des engagements ambitieux sont attendus lors de cette session extraordinaire.", "ONU", "environnement", ["climate", "summit", "earth"]),
-        ("Percée en intelligence artificielle", "Du côté de la science maintenant,",
+        ("Percée en intelligence artificielle", "International", "Du côté de la science maintenant,",
          "Des chercheurs annoncent une avancée majeure en IA générale. Cette technologie pourrait transformer la médecine, l'éducation et l'industrie dans les prochaines années.", "MIT Tech", "technologie", ["artificial", "intelligence", "robot"]),
-        ("Tensions géopolitiques en Europe", "En Europe maintenant,",
+        ("Tensions géopolitiques en Europe", "Europe", "En Europe maintenant,",
          "La diplomatie internationale s'intensifie face aux nouvelles tensions régionales. Des pourparlers d'urgence sont en cours entre les principales puissances.", "Reuters", "politique", ["diplomacy", "europe", "politics"]),
-        ("Marchés financiers en turbulences", "Du côté de l'économie,",
+        ("Marchés financiers en turbulences", "International", "Du côté de l'économie,",
          "Les bourses mondiales enregistrent de fortes fluctuations suite aux annonces des banques centrales sur les taux d'intérêt.", "Bloomberg", "economie", ["stock", "market", "finance"]),
-        ("Découverte scientifique sur Mars", "Et pour terminer sur une note plus légère,",
+        ("Découverte scientifique sur Mars", "États-Unis", "Et pour terminer sur une note plus légère,",
          "La NASA confirme la présence de traces organiques sous la surface martienne, relançant le débat sur la vie extraterrestre.", "NASA", "science", ["mars", "space", "discovery"]),
     ]
-    news = [{"titre": t[0], "transition": t[1], "resume": t[2], "source": t[3], "categorie": t[4], "keywords_photo": t[5]} for t in topics[:n]]
+    news = [{"titre": t[0], "pays": t[1], "transition": t[2], "resume": t[3], "source": t[4], "categorie": t[5], "keywords_photo": t[6]} for t in topics[:n]]
     return {
         "news":  news,
         "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en trois minutes.",
