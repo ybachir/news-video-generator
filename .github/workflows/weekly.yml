@@ -70,6 +70,7 @@ jobs:
           path: |
             output/*.mp4
             output/*.json
+            output/*.log
           retention-days: 14
           if-no-files-found: error
 
@@ -81,8 +82,9 @@ jobs:
           MP4=$(ls output/hebdo_*.mp4 | head -1)
           cp "$MP4" hebdo_latest.mp4
           [ -f output/metadata.json ] && cp output/metadata.json . || echo '{}' > metadata.json
+          [ -f output/weekly_debug.log ] && cp output/weekly_debug.log . || echo 'Pas de log de debug' > weekly_debug.log
           gh release delete weekly-latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create weekly-latest hebdo_latest.mp4 metadata.json \
+          gh release create weekly-latest hebdo_latest.mp4 metadata.json weekly_debug.log \
             --title "📅 Récap Hebdo France du $(date '+%d/%m/%Y')" \
             --notes "Récap complet de la semaine écoulée en France, généré le $(date '+%d/%m/%Y à %H:%M UTC').
 
