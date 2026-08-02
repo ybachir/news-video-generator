@@ -100,6 +100,32 @@ def test_rss():
     return articles
 
 
+@test("Filtrage RSS par fraîcheur (articles trop vieux écartés)")
+def test_rss_freshness_filter():
+    import news_video_generator as m
+    import time as _t
+    import calendar
+
+    def _shift(hours):
+        ts = calendar.timegm(_t.gmtime()) - hours * 3600
+        return _t.gmtime(ts)
+
+    fresh  = {"published_parsed": _shift(2)}
+    old    = {"published_parsed": _shift(24 * 10)}
+    nodate = {}
+
+    age_fresh = m._entry_age_hours(fresh)
+    age_old   = m._entry_age_hours(old)
+    age_none  = m._entry_age_hours(nodate)
+
+    assert age_fresh is not None and age_fresh < 3
+    assert age_old is not None and age_old > m.RSS_MAX_AGE_HOURS
+    assert age_none is None
+    assert "h" in m._fmt_age_fr(2)
+    assert "j" in m._fmt_age_fr(240)
+    print(f"    → frais={age_fresh:.1f}h, vieux={age_old:.0f}h (seuil={m.RSS_MAX_AGE_HOURS}h), sans date=None")
+
+
 # ── Visuels ────────────────────────────────────────────────────
 
 @test("Fond premium généré")
@@ -377,6 +403,7 @@ def main():
     test_system_deps()
     test_demo_news()
     test_rss()
+    test_rss_freshness_filter()
     test_background()
     test_render_intro()
     test_render_news()
