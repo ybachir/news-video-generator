@@ -24,8 +24,8 @@ import news_video_generator as m
 parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
 parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
-parser.add_argument("--theme", default="journal", choices=["journal", "worldcup"],
-                    help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026")
+parser.add_argument("--theme", default="journal", choices=["journal", "worldcup", "france"],
+                    help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026 | france = Spécial actu France")
 args = parser.parse_args()
 
 # Mode demo : désactiver les APIs
@@ -42,6 +42,8 @@ else:
 m.CONFIG['THEME'] = args.theme
 if args.theme == "worldcup":
     print("▶ Édition SPÉCIAL COUPE DU MONDE 2026 ⚽")
+elif args.theme == "france":
+    print("▶ Édition SPÉCIAL FRANCE 🇫🇷")
 
 if args.top_n:
     m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
