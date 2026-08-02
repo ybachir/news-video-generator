@@ -1,0 +1,100 @@
+name: 🇫🇷 Générer Spécial France
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode de génération"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - demo
+
+  # 8h UTC : une heure après le journal généraliste (7h UTC), pour laisser
+  # le temps aux médias français de publier leurs premiers articles du jour.
+  schedule:
+    - cron: "0 8 * * *"
+
+concurrency:
+  group: generate-france
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # requis pour publier la release "france-latest"
+
+jobs:
+  generate:
+    name: 🇫🇷 Pipeline France → Vidéo
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 🔧 Dépendances système
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
+
+      - name: 📦 Dépendances Python
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🇫🇷 Générer (mode demo)
+        if: ${{ github.event.inputs.mode == 'demo' }}
+        run: python3 run_pipeline.py --theme france --demo
+
+      - name: 🇫🇷 Générer (mode full / cron)
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        run: python3 run_pipeline.py --theme france
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: france-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            output/*.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 🌐 Publier la release "france-latest"
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MP4=$(ls output/france_*.mp4 | head -1)
+          cp "$MP4" france_latest.mp4
+          [ -f output/metadata.json ] && cp output/metadata.json . || echo '{}' > metadata.json
+          gh release delete france-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create france-latest france_latest.mp4 metadata.json \
+            --title "🇫🇷 Spécial France du $(date '+%d/%m/%Y')" \
+            --notes "Édition Spécial Actualité France générée le $(date '+%d/%m/%Y à %H:%M UTC').
+
+          **Téléchargement direct :** [france_latest.mp4](https://github.com/${{ github.repository }}/releases/download/france-latest/france_latest.mp4)"
+          echo "✅ https://github.com/${{ github.repository }}/releases/download/france-latest/france_latest.mp4"
+
+      - name: 📊 Résumé
+        if: always()
+        run: |
+          echo "## 🇫🇷 Spécial France — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls output/*.mp4 2>/dev/null | grep -q mp4; then
+            SIZE=$(du -sh output/*.mp4 2>/dev/null | cut -f1)
+            echo "| Taille vidéo | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            echo "🌐 **Téléchargement : [france_latest.mp4](https://github.com/${{ github.repository }}/releases/download/france-latest/france_latest.mp4)**" >> $GITHUB_STEP_SUMMARY
+          fi
