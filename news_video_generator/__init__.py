@@ -73,6 +73,10 @@ from .france import (
     FR_RSS_FEEDS, fetch_france_rss, structure_france_with_groq,
     get_france_news, _demo_france,
 )
+from .topics import (
+    MIN_TOPICS, MAX_TOPICS, fetch_topic_pool, detect_daily_topics,
+    structure_topic_deepdive_with_groq, get_daily_deepdive_scripts, _demo_topics,
+)
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
@@ -88,8 +92,117 @@ __all__ = [
     "humanize_for_speech", "humanize_script",
     "WC_RSS_FEEDS", "get_worldcup_news",
     "FR_RSS_FEEDS", "get_france_news",
+    "MIN_TOPICS", "MAX_TOPICS", "get_daily_deepdive_scripts",
     "main",
 ]
+
+
+def _run_pipeline_for_script(script_data: dict, config: dict, output_dir: Path) -> str:
+    """Exécute les étapes 2 à 6 du pipeline (photos, audio, vidéo, musique,
+    métadonnées) pour UN script déjà structuré. Isolée de main() pour être
+    réutilisable par le mode 'deepdive', qui appelle cette fonction une
+    fois PAR sujet détecté (plusieurs vidéos indépendantes en un seul run)."""
+    photos_dir = output_dir / "photos"
+    audio_dir  = output_dir / "audio"
+    for d in [output_dir, photos_dir, audio_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    script_path = output_dir / f"script_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+    with open(script_path, "w", encoding="utf-8") as f:
+        json.dump(script_data, f, ensure_ascii=False, indent=2)
+    print(f"\n  💾 Script : {script_path}")
+
+    # 2. Photos
+    photo_paths = get_photos(script_data, config, photos_dir)
+
+    # 3. Audio
+    segments = generate_all_audio(script_data, config, audio_dir)
+
+    # 4. Vidéo
+    try:
+        video_path = build_video(segments, photo_paths, script_data, config, output_dir)
+    except RuntimeError as e:
+        print(f"\n❌ PIPELINE ÉCHOUÉ : {e}")
+        sys.exit(1)
+
+    # 5. Musique de fond (optionnel)
+    music_path = get_music_path(output_dir)
+    if music_path and config["MUSIC_VOLUME"] > 0:
+        print(f"\n🎵 ÉTAPE 5 — Mixage musique de fond ({music_path})...")
+        mixed_path = video_path.replace(".mp4", "_music.mp4")
+        ok = mix_background_music(
+            video_path, music_path, config["MUSIC_VOLUME"], mixed_path
+        )
+        if ok and os.path.exists(mixed_path):
+            os.replace(mixed_path, video_path)   # remplace la vidéo finale
+            print("  ✅ Musique mixée")
+        else:
+            print("  ⚠️  Mix échoué — vidéo sans musique conservée")
+    else:
+        print("\n🎵 Pas de musique trouvée — dépose assets/ambient_news.mp3 pour l'activer")
+
+    # 6. Métadonnées de publication (titre YouTube, description, caption IG)
+    print("\n📝 ÉTAPE 6 — Métadonnées de publication...")
+    save_metadata(script_data, video_path, output_dir)
+
+    return video_path
+
+
+def _main_deepdive(t0: float) -> list[str]:
+    """Mode 'ZOOM SUR' : détecte 2 à 4 sujets dominants du jour (recoupés
+    par plusieurs sources) et génère une vidéo approfondie DISTINCTE par
+    sujet, chacune dans son propre sous-dossier de output/."""
+    print("🔎 Édition ZOOM SUR — détection des sujets dominants du jour...")
+
+    output_root = Path(CONFIG["OUTPUT_DIR"])
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    topics = get_daily_deepdive_scripts(CONFIG)
+    if not topics:
+        print("❌ Aucun sujet disponible.")
+        sys.exit(1)
+
+    video_paths = []
+    for i, item in enumerate(topics, 1):
+        script_data = item["script_data"]
+        slug        = item["slug"]
+        bandeau     = script_data.get("bandeau", "L'ACTU DU JOUR")[:24]
+
+        print(f"\n╔══════════ SUJET {i}/{len(topics)} — {bandeau} ══════════╗")
+
+        # Réglages d'édition PROPRES à ce sujet (pas de setdefault : on
+        # écrase à chaque itération, sinon le 1er sujet resterait affiché
+        # sur les vidéos suivantes).
+        CONFIG["EDITION_TOP"]    = "ZOOM SUR"
+        CONFIG["EDITION_BOTTOM"] = bandeau
+        CONFIG["EDITION_BRAND"]  = "ZOOM SUR L'ACTU"
+        CONFIG["FILE_PREFIX"]    = slug
+        CONFIG.pop("EDITION_STYLE", None)   # pas d'intro spéciale worldcup ici
+
+        if not script_data.get("news"):
+            print(f"  ⚠️  Sujet '{bandeau}' sans contenu — ignoré")
+            continue
+
+        video_dir  = output_root / slug
+        video_path = _run_pipeline_for_script(script_data, CONFIG, video_dir)
+        video_paths.append(video_path)
+
+    if not video_paths:
+        print("❌ Aucune vidéo générée.")
+        sys.exit(1)
+
+    elapsed = time.time() - t0
+    mins, secs = divmod(int(elapsed), 60)
+    print(f"""
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✅ ÉDITION ZOOM SUR TERMINÉE en {mins}m{secs:02d}s — {len(video_paths)} vidéo(s)
+""")
+    for vp in video_paths:
+        size_mb = os.path.getsize(vp) / 1_000_000
+        print(f"║  📹 {vp} ({size_mb:.1f} MB)")
+    print("╚══════════════════════════════════════════════════════════════════════╝\n")
+
+    return video_paths
 
 
 def main():
@@ -101,14 +214,17 @@ def main():
 """)
     t0 = time.time()
 
+    theme = CONFIG.get("THEME", "journal")
+
+    # Mode 'deepdive' : plusieurs vidéos indépendantes (une par sujet
+    # dominant du jour) — pipeline différent de main(), délégué.
+    if theme == "deepdive":
+        return _main_deepdive(t0)
+
     output_dir = Path(CONFIG["OUTPUT_DIR"])
-    photos_dir = output_dir / "photos"
-    audio_dir  = output_dir / "audio"
-    for d in [output_dir, photos_dir, audio_dir]:
-        d.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. News — thème standard (journal) ou édition spéciale (worldcup / france)
-    theme = CONFIG.get("THEME", "journal")
     if theme == "worldcup":
         CONFIG.setdefault("EDITION_TOP",    "SPÉCIAL")
         CONFIG.setdefault("EDITION_BOTTOM", "MONDIAL 2026")
@@ -133,43 +249,7 @@ def main():
         print("❌ Aucune news disponible.")
         sys.exit(1)
 
-    script_path = output_dir / f"script_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-    with open(script_path, "w", encoding="utf-8") as f:
-        json.dump(script_data, f, ensure_ascii=False, indent=2)
-    print(f"\n  💾 Script : {script_path}")
-
-    # 2. Photos
-    photo_paths = get_photos(script_data, CONFIG, photos_dir)
-
-    # 3. Audio
-    segments = generate_all_audio(script_data, CONFIG, audio_dir)
-
-    # 4. Vidéo
-    try:
-        video_path = build_video(segments, photo_paths, script_data, CONFIG, output_dir)
-    except RuntimeError as e:
-        print(f"\n❌ PIPELINE ÉCHOUÉ : {e}")
-        sys.exit(1)
-
-    # 5. Musique de fond (optionnel)
-    music_path = get_music_path(output_dir)
-    if music_path and CONFIG["MUSIC_VOLUME"] > 0:
-        print(f"\n🎵 ÉTAPE 5 — Mixage musique de fond ({music_path})...")
-        mixed_path = video_path.replace(".mp4", "_music.mp4")
-        ok = mix_background_music(
-            video_path, music_path, CONFIG["MUSIC_VOLUME"], mixed_path
-        )
-        if ok and os.path.exists(mixed_path):
-            os.replace(mixed_path, video_path)   # remplace la vidéo finale
-            print("  ✅ Musique mixée")
-        else:
-            print("  ⚠️  Mix échoué — vidéo sans musique conservée")
-    else:
-        print("\n🎵 Pas de musique trouvée — dépose assets/ambient_news.mp3 pour l'activer")
-
-    # 6. Métadonnées de publication (titre YouTube, description, caption IG)
-    print("\n📝 ÉTAPE 6 — Métadonnées de publication...")
-    save_metadata(script_data, video_path, output_dir)
+    video_path = _run_pipeline_for_script(script_data, CONFIG, output_dir)
 
     elapsed = time.time() - t0
     mins, secs = divmod(int(elapsed), 60)
@@ -179,7 +259,6 @@ def main():
 ║  ✅ PIPELINE TERMINÉ en {mins}m{secs:02d}s
 ║
 ║  📹 Vidéo  → {video_path} ({size_mb:.1f} MB)
-║  📋 Script → {script_path}
 ╚══════════════════════════════════════════════════════════════════════╝
 """)
     return video_path
