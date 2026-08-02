@@ -269,6 +269,45 @@ def test_merge_similar_topics():
     print(f"    → {len(topics)} sujets bruts fusionnés en {len(merged)}")
 
 
+@test("Récap hebdomadaire France (démo)")
+def test_weekly_demo():
+    import news_video_generator as m
+    data = m._demo_weekly()
+    assert 3 <= len(data["news"]) <= m.WEEKLY_MAX_SEGMENTS
+    for item in data["news"]:
+        for field in ["titre", "resume", "source", "categorie", "keywords_photo"]:
+            assert field in item, f"Champ '{field}' manquant"
+    assert "titre_video" in data and "hashtags" in data
+    assert "recaphebdo" in [h.lower() for h in data["hashtags"]]
+    meta = m.build_metadata(data, "/tmp/hebdo_test.mp4", {"FORMAT": "landscape"})
+    assert "shorts" not in [h.lower() for h in meta["hashtags"]], "Pas de #Shorts sur une vidéo longue paysage"
+    assert m.BRAND_HASHTAG in meta["hashtags"]
+    print(f"    → {len(data['news'])} segments, {meta['titre_video'][:55]}")
+
+
+@test("Rendu paysage (16:9) — intro / news / outro")
+def test_landscape_render():
+    import news_video_generator as m
+    fonts = m._fonts()
+    seg = {
+        "index": 1, "titre": "Titre de test assez long pour tester le retour à la ligne",
+        "categorie": "politique", "source": "Test",
+    }
+    # Fond généré directement en paysage (pas de vrai fichier photo nécessaire)
+    photo_path = "/tmp/_landscape_test_bg.jpg"
+    m.create_styled_background(["test"], "politique", 1, photo_path,
+                               w=m.LANDSCAPE_W, h=m.LANDSCAPE_H)
+
+    intro = m.render_intro_landscape("Accroche de test", fonts)
+    news  = m.render_news_frame_landscape(seg, photo_path, fonts)
+    outro = m.render_outro_landscape("Clôture de test", fonts)
+
+    for name, frame in [("intro", intro), ("news", news), ("outro", outro)]:
+        assert frame.shape == (m.LANDSCAPE_H, m.LANDSCAPE_W, 3), \
+            f"Frame '{name}' : dimensions incorrectes {frame.shape}"
+    print(f"    → 3 frames paysage {m.LANDSCAPE_W}×{m.LANDSCAPE_H} générées")
+
+
 @test("Normalisation vocale (scores, abréviations)")
 def test_speech():
     import news_video_generator as m
@@ -436,6 +475,8 @@ def main():
     test_france_demo()
     test_deepdive_demo()
     test_merge_similar_topics()
+    test_weekly_demo()
+    test_landscape_render()
     test_subtitles_ass()
     test_photo_scoring()
     test_transition_coherence()
