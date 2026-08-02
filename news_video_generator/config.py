@@ -45,6 +45,12 @@ CONFIG = {
 
 W, H = CONFIG["VIDEO_W"], CONFIG["VIDEO_H"]
 
+# Format PAYSAGE (16:9) pour les vidéos longues YouTube classiques (pas
+# des Shorts) — ex: le récap hebdomadaire. Indépendant du format portrait
+# (Shorts) ci-dessus : les deux coexistent, sélectionné via
+# CONFIG["FORMAT"] == "landscape".
+LANDSCAPE_W, LANDSCAPE_H = 1920, 1080
+
 # ── Template premium : sombre / doré ──────────────────────────
 PALETTE = {
     "bg":       (10,  10,  18),    # fond quasi-noir bleuté
