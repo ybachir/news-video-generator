@@ -73,11 +73,14 @@ def _fmt_age_fr(age_hours: float | None) -> str:
     return f"il y a {int(age_hours // 24)}j"
 
 
-def _fetch_one_feed(source: str, url: str, per_feed: int = 3) -> list[dict]:
+def _fetch_one_feed(source: str, url: str, per_feed: int = 3,
+                    max_age_hours: float = RSS_MAX_AGE_HOURS) -> list[dict]:
     """Télécharge et parse UN feed RSS avec timeout strict, en écartant
-    les articles trop vieux (RSS_MAX_AGE_HOURS). On scanne plus d'entrées
-    que `per_feed` pour compenser celles filtrées — sinon un flux qui
-    mélange brèves du jour et dossiers republiés reviendrait parfois
+    les articles plus vieux que `max_age_hours` (RSS_MAX_AGE_HOURS par
+    défaut — 48h ; un module comme weekly.py peut passer 24*7 pour
+    couvrir une semaine complète). On scanne plus d'entrées que
+    `per_feed` pour compenser celles filtrées — sinon un flux qui
+    mélange brèves récentes et dossiers republiés reviendrait parfois
     avec MOINS d'articles frais que demandé."""
     out = []
     filtered_old = 0
@@ -93,7 +96,7 @@ def _fetch_one_feed(source: str, url: str, per_feed: int = 3) -> list[dict]:
             if not title:
                 continue
             age_hours = _entry_age_hours(entry)
-            if age_hours is not None and age_hours > RSS_MAX_AGE_HOURS:
+            if age_hours is not None and age_hours > max_age_hours:
                 filtered_old += 1
                 continue
             desc = re.sub(r"<[^>]+>", "",
@@ -106,7 +109,7 @@ def _fetch_one_feed(source: str, url: str, per_feed: int = 3) -> list[dict]:
                 "age_heures":  age_hours,
             })
         if filtered_old:
-            print(f"    ⏳ {source} : {filtered_old} article(s) écarté(s) (>{RSS_MAX_AGE_HOURS}h)")
+            print(f"    ⏳ {source} : {filtered_old} article(s) écarté(s) (>{max_age_hours:.0f}h)")
     except Exception:
         pass
     return out
