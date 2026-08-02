@@ -44,6 +44,7 @@ from .config import (
 )
 from .news import (
     RSS_FEEDS, fetch_rss_raw, structure_with_groq, get_news, _demo_news,
+    RSS_MAX_AGE_HOURS, _entry_age_hours, _fmt_age_fr,
 )
 from .photos import (
     SENSITIVE_TERMS, _search_candidates, _score_candidate, _filter_sensitive_keywords,
@@ -82,6 +83,7 @@ __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
     "W", "H", "date_fr",
     "RSS_FEEDS", "fetch_rss_raw", "structure_with_groq", "get_news",
+    "RSS_MAX_AGE_HOURS", "_fmt_age_fr",
     "SENSITIVE_TERMS", "find_best_photo", "create_styled_background", "get_photos",
     "EDGE_TTS_VOICE", "EDGE_TTS_RATE", "EDGE_TTS_RETRIES", "EDGE_TTS_TIMEOUT",
     "text_to_wav_edge", "text_to_wav_espeak", "wav_to_mp3", "make_audio", "generate_all_audio",
