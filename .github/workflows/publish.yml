@@ -7,6 +7,7 @@ on:
       - "⚽ Générer Spécial Coupe du Monde"
       - "🇫🇷 Générer Spécial France"
       - "🔎 Générer Zoom Sur (deepdive)"
+      - "📅 Générer Récap Hebdo France"
     types: [completed]
 
 jobs:
@@ -67,13 +68,18 @@ jobs:
           # différente pour chaque édition.
           case "$WORKFLOW_NAME" in
             "📰 Générer Journal Vidéo")
-              RELEASE_TAG="latest"; ASSET_PREFIX="journal_latest"; MULTI="false" ;;
+              RELEASE_TAG="latest"; ASSET_PREFIX="journal_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
             "⚽ Générer Spécial Coupe du Monde")
-              RELEASE_TAG="worldcup-latest"; ASSET_PREFIX="mondial_latest"; MULTI="false" ;;
+              RELEASE_TAG="worldcup-latest"; ASSET_PREFIX="mondial_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
             "🇫🇷 Générer Spécial France")
-              RELEASE_TAG="france-latest"; ASSET_PREFIX="france_latest"; MULTI="false" ;;
+              RELEASE_TAG="france-latest"; ASSET_PREFIX="france_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
             "🔎 Générer Zoom Sur (deepdive)")
-              RELEASE_TAG="deepdive-latest"; ASSET_PREFIX="sujet"; MULTI="true" ;;
+              RELEASE_TAG="deepdive-latest"; ASSET_PREFIX="sujet"; MULTI="true"; SKIP_INSTAGRAM="false" ;;
+            "📅 Générer Récap Hebdo France")
+              # Vidéo longue au format PAYSAGE (16:9) : incompatible avec
+              # Instagram Reels (vertical, courts) — on ne publie QUE sur
+              # YouTube pour cette édition, même si INSTAGRAM_TOKEN est défini.
+              RELEASE_TAG="weekly-latest"; ASSET_PREFIX="hebdo_latest"; MULTI="false"; SKIP_INSTAGRAM="true" ;;
             *)
               echo "❌ Workflow déclencheur inconnu : $WORKFLOW_NAME"; exit 1 ;;
           esac
@@ -108,8 +114,10 @@ jobs:
               echo "⏭️ YouTube ignoré (YOUTUBE_TOKEN_JSON absent — génère-le via generate_youtube_token.py en local)"
             fi
 
-            if [ -n "$INSTAGRAM_TOKEN" ]; then
+            if [ -n "$INSTAGRAM_TOKEN" ] && [ "$SKIP_INSTAGRAM" != "true" ]; then
               python3 publish.py --video "$MP4" --platform instagram --public-url "$PUBLIC_URL" || echo "⚠️ Échec Instagram pour $MP4"
+            elif [ "$SKIP_INSTAGRAM" = "true" ]; then
+              echo "⏭️ Instagram ignoré (format paysage — incompatible avec les Reels)"
             else
               echo "⏭️ Instagram ignoré (INSTAGRAM_TOKEN absent — nécessite un compte Business + app Meta)"
             fi
