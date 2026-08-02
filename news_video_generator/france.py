@@ -20,7 +20,7 @@ from datetime import datetime
 import requests
 
 from .config import date_fr
-from .news import _fetch_one_feed, GROQ_MODELS
+from .news import _fetch_one_feed, GROQ_MODELS, _fmt_age_fr
 
 # Feeds France uniquement : politique nationale, société, régions,
 # économie française. On évite volontairement les flux "monde" des
@@ -67,7 +67,7 @@ def structure_france_with_groq(articles: list[dict], api_key: str, n: int) -> di
 
     today = date_fr(datetime.now())
     articles_txt = "\n".join(
-        f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:150]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:150]}"
         for i, a in enumerate(articles)
     )
 
@@ -75,6 +75,8 @@ def structure_france_with_groq(articles: list[dict], api_key: str, n: int) -> di
 
 Voici des articles RSS de médias français :
 {articles_txt}
+
+IMPORTANT sur la fraîcheur : préfère toujours un article récent ("il y a moins d'1h", "il y a Xh") à un article plus ancien ("il y a Xj") qui parle du MÊME sujet — c'est probablement le suivi d'une actualité déjà passée plutôt que la brève du jour. Si un sujet n'existe QUE dans des articles vieux de plusieurs jours et qu'aucun article récent ne le confirme comme toujours d'actualité aujourd'hui, ne le retiens PAS comme actu du jour.
 
 Sélectionne les {n} actualités FRANÇAISES les plus importantes et variées (politique nationale, société, économie française, régions, faits divers marquants, culture) :
 - EXCLUS toute actualité purement internationale/étrangère qui ne concerne pas directement la France (sauf si un Français, une entreprise française ou une décision française y est impliquée).
