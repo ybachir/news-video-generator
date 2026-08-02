@@ -116,8 +116,9 @@ Voici {len(articles)} articles RSS bruts :
 {articles_txt}
 
 Sélectionne les {n} actualités les plus importantes et variées, et ORDONNE-LES comme les grandes chaînes d'actu YouTube :
-- L'actu la PLUS importante du jour en premier (c'est l'accroche qui retient le spectateur).
-- Si possible, termine par une note plus légère ou positive (culture, science, sport, bonne nouvelle).
+- SUJET N°1 = l'actualité la plus VIRALE du moment, c'est-à-dire celle qui revient le plus souvent, sous des angles différents, chez PLUSIEURS sources différentes dans la liste ci-dessus (ce chevauchement multi-sources est le signal qu'un sujet domine l'actualité du jour) — quel que soit le thème (politique, sport, catastrophe, buzz culturel, économie...). N'aie AUCUN sujet de prédilection fixe : le sujet n°1 doit changer d'un jour à l'autre selon ce qui domine réellement les flux RSS de {today}, jamais un thème que tu choisirais par habitude.
+- Si aucun sujet ne se détache clairement (pas de recoupement multi-sources), prends l'actu la plus importante/récente en tête.
+- Si possible, termine par une note plus légère ou positive (culture, science, sport, bonne nouvelle) — sauf si cette note légère est elle-même le sujet viral du jour, auquel cas elle peut passer en premier.
 Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le titre (le titre n'apparaît qu'à l'écran). Règles impératives :
 - Le résumé doit être 100% autonome à l'oral : la PREMIÈRE phrase nomme clairement le sujet (pays, personne, institution).
 - 2-3 phrases courtes sujet-verbe-complément, 45-60 mots, factuel, rythme de présentateur.
