@@ -87,34 +87,54 @@ def _esc(text: str) -> str:
     return text.replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-_ASS_HEADER = """[Script Info]
+_ASS_HEADER_TEMPLATE = """[Script Info]
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: {w}
+PlayResY: {h}
 WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,DejaVu Sans,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,3,2,2,70,70,175,1
+Style: Sub,DejaVu Sans,{fontsize},&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 
-def build_ass(words: list[dict], out_path: str | Path) -> str | None:
+def _ass_header(w: int, h: int) -> str:
+    """En-tête ASS dimensionné pour la résolution réelle de la vidéo —
+    portrait (1080×1920, Shorts) ou paysage (1920×1080, vidéos longues).
+    Taille de police et marges mises à l'échelle sur la référence portrait
+    (1080×1920) pour garder des proportions cohérentes dans les deux cas."""
+    scale = h / 1920
+    fontsize = max(28, round(58 * scale))
+    outline  = max(2, round(3 * scale))
+    shadow   = max(1, round(2 * scale))
+    margin_l = round(70 * scale)
+    margin_r = round(70 * scale)
+    margin_v = round(175 * scale)
+    return _ASS_HEADER_TEMPLATE.format(
+        w=w, h=h, fontsize=fontsize, outline=outline, shadow=shadow,
+        margin_l=margin_l, margin_r=margin_r, margin_v=margin_v,
+    )
+
+
+def build_ass(words: list[dict], out_path: str | Path,
+              w: int = 1080, h: int = 1920) -> str | None:
     """Écrit le fichier .ass karaoké pour un segment.
 
     Un évènement Dialogue par mot : le texte complet du groupe, avec le
     mot actif encadré en doré. Le premier évènement du groupe porte le
     fondu d'entrée, le dernier le fondu de sortie.
+    `w`/`h` : résolution réelle de la vidéo (portrait par défaut).
     Retourne le chemin écrit, ou None si aucun mot exploitable."""
     words = _sanitize_word_timings(words)
     if not words:
         return None
 
-    lines = [_ASS_HEADER]
+    lines = [_ass_header(w, h)]
     for grp in _group_words(words):
         last = len(grp) - 1
         for j, w in enumerate(grp):
