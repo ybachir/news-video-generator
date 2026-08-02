@@ -28,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
 from .config import date_fr
-from .news import RSS_FEEDS, _fetch_one_feed, GROQ_MODELS
+from .news import RSS_FEEDS, _fetch_one_feed, GROQ_MODELS, _fmt_age_fr
 
 # Nombre de sujets à conserver : jamais moins de 2, jamais plus de 4 —
 # ajusté selon ce que Groq trouve réellement corroboré par plusieurs
@@ -70,14 +70,16 @@ def detect_daily_topics(articles: list[dict], api_key: str) -> list[dict] | None
         return None
 
     numbered = "\n".join(
-        f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:120]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:120]}"
         for i, a in enumerate(articles)
     )
 
-    prompt = f"""Tu es rédacteur en chef. Voici {len(articles)} articles RSS bruts collectés aujourd'hui, de sources différentes :
+    prompt = f"""Tu es rédacteur en chef. Voici {len(articles)} articles RSS bruts collectés aujourd'hui, de sources différentes, avec leur ancienneté entre crochets :
 {numbered}
 
 Identifie les sujets d'actualité qui reviennent chez PLUSIEURS sources DIFFÉRENTES (même événement traité sous des angles différents par au moins 2 médias distincts) — c'est le signal qu'un sujet domine réellement l'actualité du jour, quel que soit le thème (politique, catastrophe, sport, économie, buzz...).
+
+ATTENTION au piège des dossiers récurrents : certains sujets (conflits qui durent depuis des mois, prises d'otages anciennes, crises migratoires chroniques...) sont republiés régulièrement par plusieurs médias sans être une actualité NOUVELLE aujourd'hui — ce n'est PAS la même chose qu'un sujet viral du jour. Un sujet ne compte comme "recoupé" que si PLUSIEURS de ses articles sont RÉCENTS (idéalement moins de 24h, au pire moins de 48h) : si tous les articles qui en parlent ont plusieurs jours, ignore ce sujet même s'il apparaît chez plusieurs sources.
 
 Retourne entre 2 et 4 sujets maximum, ORDONNÉS du plus recoupé (le plus de sources différentes) au moins recoupé. N'invente aucun sujet arbitraire : base-toi uniquement sur les articles fournis. Si un sujet n'est mentionné que par une seule source, ne le retiens PAS (sauf si tu ne trouves vraiment aucun sujet avec ≥2 sources, auquel cas retourne les 2 sujets les plus solides que tu as, même mono-source, pour ne rien renvoyer de vide).
 
@@ -170,7 +172,7 @@ def structure_topic_deepdive_with_groq(titre_sujet: str, articles: list[dict], a
 
     today = date_fr(datetime.now())
     articles_txt = "\n".join(
-        f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:300]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:300]}"
         for i, a in enumerate(articles)
     )
 
