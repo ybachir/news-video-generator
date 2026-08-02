@@ -14,6 +14,21 @@ from .config import date_fr
 
 DEFAULT_HASHTAGS = ["actualités", "journal", "news", "monde", "information"]
 
+# Hashtags fixes ajoutés à CHAQUE vidéo, quel que soit le thème/l'édition :
+# - "Shorts" aide YouTube à classer explicitement le contenu dans le flux
+#   Shorts (améliore la découverte au-delà du simple format 9:16).
+# - Le hashtag de marque est IDENTIQUE sur toutes les vidéos (journal,
+#   worldcup, france, deepdive) — la chaîne reste la même, ça permet à un
+#   spectateur qui a aimé une vidéo de retrouver toutes les autres en un
+#   clic, et construit une identité reconnaissable dans le temps.
+BRAND_HASHTAG = "lessentieldelactu"
+ALWAYS_ON_HASHTAGS = ["Shorts", BRAND_HASHTAG]
+
+# Plafond total (spécifiques + fixes) — au-delà, Instagram/TikTok
+# pénalisent légèrement (perçu comme spam) et YouTube n'exploite quasi
+# rien au-delà des hashtags affichés au-dessus du titre.
+MAX_HASHTAGS = 10
+
 
 def build_metadata(script_data: dict, video_path: str) -> dict:
     """Assemble les métadonnées de publication à partir du script du jour."""
@@ -21,7 +36,15 @@ def build_metadata(script_data: dict, video_path: str) -> dict:
     titres   = [item.get("titre", "") for item in script_data.get("news", [])]
 
     hashtags = script_data.get("hashtags") or DEFAULT_HASHTAGS
-    hashtags = [h.lstrip("#").strip() for h in hashtags if h.strip()][:10]
+    hashtags = [h.lstrip("#").strip() for h in hashtags if h.strip()]
+
+    # Les hashtags fixes priment : s'ils ne sont pas déjà présents (comparaison
+    # insensible à la casse), on réserve leur place plutôt que de risquer de
+    # les perdre en coupant à MAX_HASHTAGS après les avoir ajoutés en fin de liste.
+    seen_lower    = {h.lower() for h in hashtags}
+    missing_fixed = [t for t in ALWAYS_ON_HASHTAGS if t.lower() not in seen_lower]
+    room          = max(0, MAX_HASHTAGS - len(missing_fixed))
+    hashtags      = hashtags[:room] + missing_fixed
 
     titre_video = (script_data.get("titre_video")
                    or f"Les actus du jour — {date_str}")[:95]
