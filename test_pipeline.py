@@ -185,6 +185,20 @@ def test_worldcup_demo():
     print(f"    → {meta['titre_video'][:60]}")
 
 
+@test("Édition Spécial France (démo)")
+def test_france_demo():
+    import news_video_generator as m
+    data = m._demo_france(5)
+    assert len(data["news"]) == 5
+    for item in data["news"]:
+        for field in ["titre", "resume", "source", "region", "categorie", "keywords_photo"]:
+            assert field in item, f"Champ '{field}' manquant"
+    assert "titre_video" in data and "hashtags" in data
+    assert "france" in [h.lower() for h in data["hashtags"]]
+    meta = m.build_metadata(data, "/tmp/france_test.mp4")
+    print(f"    → {meta['titre_video'][:60]}")
+
+
 @test("Normalisation vocale (scores, abréviations)")
 def test_speech():
     import news_video_generator as m
@@ -348,6 +362,7 @@ def main():
     test_palette()
     test_metadata()
     test_worldcup_demo()
+    test_france_demo()
     test_subtitles_ass()
     test_photo_scoring()
     test_transition_coherence()
