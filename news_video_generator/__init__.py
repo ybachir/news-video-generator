@@ -69,6 +69,10 @@ from .worldcup import (
     WC_RSS_FEEDS, fetch_worldcup_rss, structure_worldcup_with_groq,
     get_worldcup_news, _demo_worldcup,
 )
+from .france import (
+    FR_RSS_FEEDS, fetch_france_rss, structure_france_with_groq,
+    get_france_news, _demo_france,
+)
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
@@ -83,6 +87,7 @@ __all__ = [
     "build_metadata", "save_metadata",
     "humanize_for_speech", "humanize_script",
     "WC_RSS_FEEDS", "get_worldcup_news",
+    "FR_RSS_FEEDS", "get_france_news",
     "main",
 ]
 
@@ -102,7 +107,7 @@ def main():
     for d in [output_dir, photos_dir, audio_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # 1. News — thème standard (journal) ou édition spéciale (worldcup)
+    # 1. News — thème standard (journal) ou édition spéciale (worldcup / france)
     theme = CONFIG.get("THEME", "journal")
     if theme == "worldcup":
         CONFIG.setdefault("EDITION_TOP",    "SPÉCIAL")
@@ -111,6 +116,12 @@ def main():
         CONFIG.setdefault("FILE_PREFIX",    "mondial")
         CONFIG.setdefault("EDITION_STYLE",  "worldcup")   # intro ballon + tricolore
         script_data = get_worldcup_news(CONFIG)
+    elif theme == "france":
+        CONFIG.setdefault("EDITION_TOP",    "SPÉCIAL")
+        CONFIG.setdefault("EDITION_BOTTOM", "FRANCE")
+        CONFIG.setdefault("EDITION_BRAND",  "SPÉCIAL FRANCE")
+        CONFIG.setdefault("FILE_PREFIX",    "france")
+        script_data = get_france_news(CONFIG)
     else:
         # Identité "nouvelle génération" : positionnement des chaînes d'actu
         # les plus vues (l'essentiel, rapide, accessible) — design original
