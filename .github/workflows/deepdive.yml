@@ -1,0 +1,106 @@
+name: 🔎 Générer Zoom Sur (deepdive)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode de génération"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - demo
+
+  # 9h UTC : après le journal (7h) et le spécial France (8h) — laisse le
+  # temps aux flux RSS de se remplir davantage pour une bonne détection
+  # de sujets multi-sources.
+  schedule:
+    - cron: "0 9 * * *"
+
+concurrency:
+  group: generate-deepdive
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # requis pour publier la release "deepdive-latest"
+
+jobs:
+  generate:
+    name: 🔎 Pipeline Zoom Sur → 2 à 4 vidéos
+    runs-on: ubuntu-latest
+    timeout-minutes: 40   # plusieurs vidéos générées dans le même run
+
+    steps:
+
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 🔧 Dépendances système
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg espeak-ng fonts-dejavu-core
+
+      - name: 📦 Dépendances Python
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🔎 Générer (mode demo)
+        if: ${{ github.event.inputs.mode == 'demo' }}
+        run: python3 run_pipeline.py --theme deepdive --demo
+
+      - name: 🔎 Générer (mode full / cron)
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        run: python3 run_pipeline.py --theme deepdive
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepdive-${{ github.run_number }}
+          path: |
+            output/*/*.mp4
+            output/*/*.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 🌐 Publier la release "deepdive-latest"
+        if: ${{ github.event.inputs.mode != 'demo' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf release_assets && mkdir release_assets
+          i=1
+          for f in output/*/sujet*_*.mp4; do
+            [ -f "$f" ] || continue
+            cp "$f" "release_assets/sujet${i}.mp4"
+            META="$(dirname "$f")/metadata.json"
+            [ -f "$META" ] && cp "$META" "release_assets/metadata_sujet${i}.json"
+            i=$((i+1))
+          done
+          NB=$((i-1))
+          gh release delete deepdive-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create deepdive-latest release_assets/* \
+            --title "🔎 Zoom Sur — $(date '+%d/%m/%Y') ($NB sujets)" \
+            --notes "Édition Zoom Sur générée le $(date '+%d/%m/%Y à %H:%M UTC') — $NB vidéo(s) détaillée(s), une par sujet dominant du jour (recoupé par plusieurs sources)."
+          echo "✅ $NB vidéo(s) publiée(s) dans la release deepdive-latest"
+
+      - name: 📊 Résumé
+        if: always()
+        run: |
+          echo "## 🔎 Zoom Sur — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          NB=$(ls output/*/*.mp4 2>/dev/null | grep -c mp4 || echo 0)
+          echo "| Vidéos générées | $NB |" >> $GITHUB_STEP_SUMMARY
+          if [ "$NB" -gt 0 ]; then
+            echo "🌐 **Téléchargement : [voir la release deepdive-latest](https://github.com/${{ github.repository }}/releases/tag/deepdive-latest)**" >> $GITHUB_STEP_SUMMARY
+          fi
