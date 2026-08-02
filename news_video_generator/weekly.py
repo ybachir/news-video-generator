@@ -1,0 +1,232 @@
+"""
+weekly.py — Édition RÉCAP HEBDO : vidéo YouTube LONGUE (pas un Short,
+format PAYSAGE 16:9) qui regroupe tous les évènements marquants de
+France survenus dans les 7 derniers jours.
+
+Contrairement au journal quotidien (5 actus, format court vertical) ou
+à Zoom Sur (1 sujet détaillé par vidéo), ce module :
+- scrape les flux RSS France sur une fenêtre de 7 jours (au lieu des 48h
+  du journal quotidien — voir WEEKLY_MAX_AGE_HOURS)
+- envoie l'ensemble à Groq en UN seul appel pour construire un récap
+  complet, aussi long que la semaine le justifie réellement (8 à 20
+  segments), dédupliqué (une grève qui dure 4 jours = 1 seul segment,
+  pas 4) et ordonné chronologiquement
+- produit une vidéo au format PAYSAGE (16:9) : CONFIG["FORMAT"] =
+  "landscape" bascule tout le pipeline de rendu (voir __init__.py,
+  video.py, render.py, photos.py, subtitles.py) sans toucher au
+  pipeline Shorts existant.
+
+Le JSON produit garde le même schéma "news" que les autres modules →
+photos/audio/vidéo/métadonnées sont réutilisés tels quels.
+"""
+import re
+import json
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import requests
+
+from .config import date_fr
+from .news import _fetch_one_feed, GROQ_MODELS, _fmt_age_fr
+from .france import FR_RSS_FEEDS
+from .topics import _topic_keywords
+
+# Fenêtre de fraîcheur élargie à 7 jours (le journal quotidien filtre à
+# 48h — voir RSS_MAX_AGE_HOURS dans news.py) : un récap hebdo doit
+# couvrir toute la semaine, pas seulement les 2 derniers jours.
+WEEKLY_MAX_AGE_HOURS = 24 * 7
+
+WEEKLY_MIN_SEGMENTS = 8
+WEEKLY_MAX_SEGMENTS = 20
+
+
+def fetch_weekly_france_pool(per_feed: int = 20) -> list[dict]:
+    """Scrape les flux France sur 7 jours (plus d'articles par source que
+    le journal quotidien, fenêtre de fraîcheur élargie à WEEKLY_MAX_AGE_HOURS)."""
+    print("  🇫🇷 Scraping RSS France (fenêtre 7 jours)...")
+    per_source: dict[str, list[dict]] = {}
+    with ThreadPoolExecutor(max_workers=len(FR_RSS_FEEDS)) as ex:
+        futures = {
+            ex.submit(_fetch_one_feed, s, u, per_feed, WEEKLY_MAX_AGE_HOURS): s
+            for s, u in FR_RSS_FEEDS
+        }
+        for fut in as_completed(futures):
+            per_source[futures[fut]] = fut.result()
+
+    results, seen = [], set()
+    for source, _ in FR_RSS_FEEDS:
+        for art in per_source.get(source, []):
+            if art["titre_brut"] in seen:
+                continue
+            seen.add(art["titre_brut"])
+            results.append(art)
+
+    ok = sum(1 for v in per_source.values() if v)
+    print(f"  ✅ {len(results)} articles collectés sur 7 jours ({ok}/{len(FR_RSS_FEEDS)} sources OK)")
+    return results
+
+
+def _dedupe_weekly_segments(news: list[dict]) -> list[dict]:
+    """Garde-fou anti-doublon (même logique que topics.py) : si Groq a
+    quand même généré deux segments qui se recoupent trop (ex: un même
+    évènement raconté deux fois à des jours différents), on ne garde
+    que le premier plutôt que de dupliquer le récap."""
+    merged: list[dict] = []
+    for item in news:
+        kw = _topic_keywords(item.get("titre", ""))
+        is_dup = False
+        for m in merged:
+            mkw = _topic_keywords(m.get("titre", ""))
+            if not kw or not mkw:
+                continue
+            overlap = len(kw & mkw) / max(1, min(len(kw), len(mkw)))
+            if overlap >= 0.6:
+                is_dup = True
+                break
+        if not is_dup:
+            merged.append(item)
+    return merged
+
+
+def structure_weekly_with_groq(articles: list[dict], api_key: str) -> dict | None:
+    """Construit le récap hebdomadaire complet en UN appel Groq : autant
+    de segments que la semaine le justifie réellement (entre 8 et 20)."""
+    if not api_key:
+        return None
+
+    today = date_fr(datetime.now())
+    articles_txt = "\n".join(
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:150]}"
+        for i, a in enumerate(articles)
+    )
+
+    prompt = f"""Tu es rédacteur en chef d'une émission hebdomadaire YouTube "Récap de la semaine" consacrée à l'actualité FRANÇAISE. Nous sommes le {today}, tu couvres les 7 derniers jours.
+
+Voici {len(articles)} articles RSS français des 7 derniers jours, avec leur ancienneté entre crochets :
+{articles_txt}
+
+Construis un récap COMPLET et DÉTAILLÉ de la semaine écoulée en France :
+- Identifie TOUS les évènements/sujets réellement marquants de la semaine (politique nationale, société, économie, faits divers majeurs, régions, culture...) — ne te limite PAS à un nombre fixe : génère entre 8 et 20 segments selon ce que la semaine a RÉELLEMENT produit (une semaine calme = moins de segments, une semaine chargée = plus).
+- DÉDUPLIQUE : si plusieurs articles couvrent le même évènement à des jours différents (ex: une grève qui dure plusieurs jours), n'en fais qu'UN SEUL segment qui raconte l'évolution complète sur la semaine, jamais un segment par article.
+- ORDONNE par ordre chronologique (du plus ancien au plus récent dans la semaine), sauf si un regroupement thématique est plus clair pour un sujet qui a duré toute la semaine.
+- Pour chaque segment, précise le fait principal ET son évolution/contexte sur la semaine si pertinent.
+
+Résumés 50-80 mots par segment, 100% autonomes à l'oral (voix off SANS le titre affiché) :
+- La PREMIÈRE phrase nomme clairement le sujet (lieu, personne, institution).
+- Phrases courtes sujet-verbe-complément, factuel, neutre, aucune opinion.
+- Interdits : style télégraphique, débuter par un pronom vague.
+
+Pour transition : accroche orale (2-6 mots + virgule) cohérente avec l'enchaînement chronologique/thématique — jamais "On commence"/"On continue" répété mécaniquement.
+
+RÈGLES D'ÉCRITURE ORALE :
+- Scores/plages toujours avec "à" : "2 à 1" — jamais de tiret
+- Pays/institutions en toutes lettres, aucun sigle non lexicalisé, "contre" au lieu de "vs"
+
+Pour photo_query : scène anglaise précise et photographiable (3-6 mots) liée SPÉCIFIQUEMENT à ce segment.
+Pour keywords_photo : 3 mots-clés anglais de repli.
+
+Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
+{{
+  "news": [
+    {{
+      "titre": "Titre court percutant (max 8 mots)",
+      "transition": "Accroche orale (2-6 mots + virgule)",
+      "resume": "Résumé oral autonome 50-80 mots",
+      "source": "Nom du média principal (ou 'Sources multiples')",
+      "categorie": "politique|economie|science|technologie|sport|culture|environnement|societe|monde",
+      "photo_query": "scène précise en anglais 3-6 mots",
+      "keywords_photo": ["mot1", "mot2", "mot3"]
+    }}
+  ],
+  "intro": "Accroche d'ouverture du récap hebdo, 15-20 mots (ex: 'Cette semaine en France, voici tout ce qu'il fallait retenir, en un seul récap.')",
+  "outro": "Clôture donnant rendez-vous la semaine prochaine, 10-15 mots",
+  "titre_video": "Titre YouTube accrocheur pour un récap hebdo (max 95 caractères, avec la période couverte)",
+  "hashtags": ["recaphebdo", "5 à 8 hashtags français SANS le symbole #"]
+}}"""
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    for model in GROQ_MODELS:
+        for attempt in (1, 2):
+            body = {
+                "model": model,
+                "max_tokens": 7000,
+                "temperature": 0.4,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            try:
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers, json=body, timeout=60
+                )
+                if r.status_code == 429:
+                    import time as _t; _t.sleep(3 * attempt)
+                    continue
+                if r.status_code != 200:
+                    print(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:150]}")
+                    break
+                raw = r.json()["choices"][0]["message"]["content"].strip()
+                raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
+                match = re.search(r'\{.*\}', raw, re.DOTALL)
+                if match:
+                    result = json.loads(match.group(0))
+                    if result.get("news"):
+                        result["news"] = _dedupe_weekly_segments(result["news"])
+                        print(f"  ✅ {len(result['news'])} segments récap hebdo via Groq ({model})")
+                        return result
+            except Exception as e:
+                print(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {e}")
+    return None
+
+
+def get_weekly_france_news(config: dict) -> dict:
+    """Pipeline de collecte du récap hebdomadaire France."""
+    print("\n📅 ÉTAPE 1 — Collecte du récap hebdomadaire France (7 jours)...")
+
+    pool = fetch_weekly_france_pool()
+
+    if config["GROQ_API_KEY"] and pool:
+        print("  🤖 Structuration du récap via Groq...")
+        result = structure_weekly_with_groq(pool, config["GROQ_API_KEY"])
+        if result and len(result.get("news", [])) >= 3:
+            news = result["news"][:WEEKLY_MAX_SEGMENTS]
+            result["news"] = news
+            print(f"\n📋 Récap de la semaine ({len(news)} segments) :")
+            for i, item in enumerate(news, 1):
+                print(f"  {i:2}. [{item.get('source','?')}] {item['titre'][:65]}")
+            return result
+
+    print("  ⚠️  Groq/RSS indisponible → récap de démo")
+    return _demo_weekly()
+
+
+def _demo_weekly() -> dict:
+    """Récap de démo statique (aucune source disponible)."""
+    today = date_fr(datetime.now())
+    topics = [
+        ("Ouverture du procès très attendu à Paris", "Premier retour sur une semaine chargée,",
+         "Le procès très suivi qui s'est ouvert lundi à Paris a marqué le début de semaine, avec une forte présence médiatique et des débats qui devraient s'étendre sur plusieurs jours devant la cour.",
+         "Sources multiples", "societe", ["french courthouse paris", "justice building", "trial"]),
+        ("Grève reconduite dans les transports", "Autre sujet qui a rythmé la semaine,",
+         "Le mouvement de grève dans les transports, débuté en milieu de semaine, a été reconduit après l'échec des négociations avec le gouvernement. Plusieurs villes ont été fortement impactées.",
+         "Sources multiples", "societe", ["french train station", "public transport strike", "commuters"]),
+        ("Nouvelle usine annoncée dans le Nord", "Du côté de l'économie cette semaine,",
+         "Une entreprise industrielle a confirmé jeudi la création de plusieurs centaines d'emplois dans le Nord de la France, saluée par les élus locaux et les syndicats.",
+         "Sources multiples", "economie", ["french factory industrial", "manufacturing plant france", "industry"]),
+        ("Épisode de canicule sur une grande partie du pays", "Toujours cette semaine, côté météo,",
+         "Météo-France a placé plusieurs départements en vigilance orange durant le week-end, avec des températures largement supérieures aux normales de saison sur une bonne partie du territoire.",
+         "Sources multiples", "environnement", ["french countryside heatwave", "sun summer france", "weather"]),
+        ("Une victoire sportive qui a marqué les esprits", "Et pour clore cette semaine sur une note positive,",
+         "Le sport français a connu un moment fort samedi, largement commenté sur les réseaux sociaux et salué par plusieurs personnalités politiques au cours du week-end.",
+         "Sources multiples", "sport", ["french athlete celebration", "sports victory france", "stadium"]),
+    ]
+    news = [{"titre": t[0], "transition": t[1], "resume": t[2], "source": t[3],
+             "categorie": t[4], "keywords_photo": t[5]} for t in topics]
+    return {
+        "news":  news,
+        "intro": "Cette semaine en France, voici tout ce qu'il fallait retenir, en un seul récap complet.",
+        "outro": "C'était le récap de la semaine. Rendez-vous samedi prochain pour la suite.",
+        "titre_video": f"📅 Récap de la semaine en France — {today}",
+        "hashtags": ["recaphebdo", "france", "actualite", "semaine", "récap"],
+    }
