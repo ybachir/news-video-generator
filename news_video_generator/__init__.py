@@ -77,6 +77,7 @@ from .france import (
 from .topics import (
     MIN_TOPICS, MAX_TOPICS, fetch_topic_pool, detect_daily_topics,
     structure_topic_deepdive_with_groq, get_daily_deepdive_scripts, _demo_topics,
+    _merge_similar_topics,
 )
 
 __all__ = [
