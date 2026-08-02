@@ -199,6 +199,28 @@ def test_france_demo():
     print(f"    → {meta['titre_video'][:60]}")
 
 
+@test("Édition Zoom Sur / deepdive (démo)")
+def test_deepdive_demo():
+    import news_video_generator as m
+    topics = m._demo_topics()
+    assert m.MIN_TOPICS <= len(topics) <= m.MAX_TOPICS
+    slugs = set()
+    for item in topics:
+        assert "script_data" in item and "slug" in item
+        slugs.add(item["slug"])
+        data = item["script_data"]
+        assert 2 <= len(data["news"]) <= 4, "Un deep dive doit avoir 2 à 4 segments"
+        for seg in data["news"]:
+            for field in ["titre", "angle", "resume", "source", "categorie", "keywords_photo"]:
+                assert field in seg, f"Champ '{field}' manquant"
+            # Format détaillé : résumés plus longs qu'un segment de journal classique
+            assert len(seg["resume"].split()) >= 30, "Résumé trop court pour un deep dive"
+        assert "titre_video" in data and "hashtags" in data and "bandeau" in data
+        meta = m.build_metadata(data, f"/tmp/{item['slug']}_test.mp4")
+        print(f"    → [{item['slug']}] {meta['titre_video'][:55]}")
+    assert len(slugs) == len(topics), "Les slugs des sujets doivent être uniques"
+
+
 @test("Normalisation vocale (scores, abréviations)")
 def test_speech():
     import news_video_generator as m
@@ -363,6 +385,7 @@ def main():
     test_metadata()
     test_worldcup_demo()
     test_france_demo()
+    test_deepdive_demo()
     test_subtitles_ass()
     test_photo_scoring()
     test_transition_coherence()
