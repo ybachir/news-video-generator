@@ -6,7 +6,7 @@ RSS brut puis démo statique si aucune source n'est disponible.
 """
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -33,27 +33,80 @@ RSS_FEEDS = [
 RSS_TIMEOUT = 10
 RSS_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; NewsVideoBot/1.0)"}
 
+# Articles plus vieux que ce seuil sont écartés à la source : sans ce
+# filtre, un dossier "de fond" republié par un média (ex: une prise
+# d'otage vieille de plusieurs années, une crise migratoire récurrente)
+# est traité EXACTEMENT comme une brève du jour — et pire, ce genre de
+# sujet récurrent est souvent couvert par PLUSIEURS médias à la fois, ce
+# qui le fait ressortir à tort comme "le plus viral" en mode deepdive.
+# Marge de 48h (le cron tourne 1×/jour) plutôt que 24h strict, pour ne
+# pas être trop agressif sur les fuseaux horaires et publications tardives.
+RSS_MAX_AGE_HOURS = 48
+
+
+def _entry_age_hours(entry) -> float | None:
+    """Âge de l'article en heures depuis sa publication (ou sa dernière
+    mise à jour si la date de publication est absente). Retourne None si
+    aucune date exploitable n'est fournie par le flux — l'article n'est
+    alors PAS filtré (certains flux RSS valides n'exposent aucune date)."""
+    parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+    if not parsed:
+        return None
+    try:
+        published = datetime(*parsed[:6], tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - published).total_seconds() / 3600
+        return max(0.0, age)
+    except Exception:
+        return None
+
+
+def _fmt_age_fr(age_hours: float | None) -> str:
+    """Formate un âge en heures pour affichage dans les prompts Groq —
+    donne un signal de fraîcheur explicite au modèle en plus du filtre
+    programmatique."""
+    if age_hours is None:
+        return "date inconnue"
+    if age_hours < 1:
+        return "il y a moins d'1h"
+    if age_hours < 24:
+        return f"il y a {int(age_hours)}h"
+    return f"il y a {int(age_hours // 24)}j"
+
 
 def _fetch_one_feed(source: str, url: str, per_feed: int = 3) -> list[dict]:
-    """Télécharge et parse UN feed RSS avec timeout strict."""
+    """Télécharge et parse UN feed RSS avec timeout strict, en écartant
+    les articles trop vieux (RSS_MAX_AGE_HOURS). On scanne plus d'entrées
+    que `per_feed` pour compenser celles filtrées — sinon un flux qui
+    mélange brèves du jour et dossiers republiés reviendrait parfois
+    avec MOINS d'articles frais que demandé."""
     out = []
+    filtered_old = 0
     try:
         r = requests.get(url, timeout=RSS_TIMEOUT, headers=RSS_HEADERS)
         if r.status_code != 200:
             return out
         feed = feedparser.parse(r.content)
-        for entry in feed.entries[:per_feed]:
+        for entry in feed.entries[:per_feed * 4]:   # marge de scan
+            if len(out) >= per_feed:
+                break
             title = entry.get("title", "").strip()
             if not title:
+                continue
+            age_hours = _entry_age_hours(entry)
+            if age_hours is not None and age_hours > RSS_MAX_AGE_HOURS:
+                filtered_old += 1
                 continue
             desc = re.sub(r"<[^>]+>", "",
                           entry.get("summary", "") or
                           entry.get("description", "")).strip()
             out.append({
-                "titre_brut": title[:200],
-                "desc_brute": desc[:400] if desc else title,
-                "source": source,
+                "titre_brut":  title[:200],
+                "desc_brute":  desc[:400] if desc else title,
+                "source":      source,
+                "age_heures":  age_hours,
             })
+        if filtered_old:
+            print(f"    ⏳ {source} : {filtered_old} article(s) écarté(s) (>{RSS_MAX_AGE_HOURS}h)")
     except Exception:
         pass
     return out
@@ -106,14 +159,16 @@ def structure_with_groq(articles: list[dict], api_key: str, n: int) -> dict | No
 
     today = date_fr(datetime.now(), with_weekday=False)
     articles_txt = "\n".join(
-        f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:150]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:150]}"
         for i, a in enumerate(articles)
     )
 
     prompt = f"""Tu es le rédacteur en chef d'un média d'actualité nouvelle génération sur YouTube et TikTok, dans l'esprit des chaînes d'info les plus vues de France : RAPIDE, FACILE, ACCESSIBLE. Ton public a 15-35 ans. Nous sommes le {today}.
 
-Voici {len(articles)} articles RSS bruts :
+Voici {len(articles)} articles RSS bruts, avec leur ancienneté indiquée entre crochets :
 {articles_txt}
+
+IMPORTANT sur la fraîcheur : préfère toujours un article récent ("il y a moins d'1h", "il y a Xh") à un article plus ancien ("il y a Xj") qui parle du MÊME sujet — c'est probablement le suivi d'une actualité déjà passée plutôt que la brève du jour. Si un sujet n'existe QUE dans des articles vieux de plusieurs jours et qu'aucun article récent ne le confirme comme toujours d'actualité aujourd'hui, ne le retiens PAS comme actu du jour.
 
 Sélectionne les {n} actualités les plus importantes et variées, et ORDONNE-LES comme les grandes chaînes d'actu YouTube :
 - SUJET N°1 = l'actualité la plus VIRALE du moment, c'est-à-dire celle qui revient le plus souvent, sous des angles différents, chez PLUSIEURS sources différentes dans la liste ci-dessus (ce chevauchement multi-sources est le signal qu'un sujet domine l'actualité du jour) — quel que soit le thème (politique, sport, catastrophe, buzz culturel, économie...). N'aie AUCUN sujet de prédilection fixe : le sujet n°1 doit changer d'un jour à l'autre selon ce qui domine réellement les flux RSS de {today}, jamais un thème que tu choisirais par habitude.
