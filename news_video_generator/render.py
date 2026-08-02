@@ -9,7 +9,7 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 import numpy as np
 
-from .config import W, H, PALETTE, CATEGORY_ACCENT, date_fr
+from .config import W, H, LANDSCAPE_W, LANDSCAPE_H, PALETTE, CATEGORY_ACCENT, date_fr
 
 
 def _fonts():
@@ -422,6 +422,201 @@ def render_outro(text: str, fonts: dict,
 
     # CTA — texte seul, sans icônes emoji
     draw.text((W // 2, H // 2 + 160),
+              "LIKE  •  ABONNE-TOI  •  COMMENTE",
+              font=fonts["regular_sm"], fill=(*PALETTE["gold"], 210), anchor="mm")
+
+    return np.array(img.convert("RGB"))
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  FORMAT PAYSAGE (16:9) — vidéos longues YouTube (pas des Shorts),
+#  ex: le récap hebdomadaire. Même identité visuelle sombre/doré que le
+#  format portrait ci-dessus, proportions recalculées pour l'horizontale.
+#  Fonctions autonomes (prennent w/h en paramètres) pour ne prendre AUCUN
+#  risque sur le pipeline Shorts existant, qui reste inchangé.
+# ═══════════════════════════════════════════════════════════════════
+
+def render_intro_landscape(text: str, fonts: dict, top: str = "RÉCAP",
+                           bottom: str = "DE LA SEMAINE",
+                           w: int = LANDSCAPE_W, h: int = LANDSCAPE_H) -> np.ndarray:
+    """Écran d'intro paysage — même carte centrale dorée que le portrait,
+    proportions élargies pour le 16:9."""
+    img  = Image.new("RGB", (w, h), PALETTE["bg"])
+    draw = ImageDraw.Draw(img)
+
+    for y in range(h):
+        t = y / h
+        r = int(PALETTE["bg"][0] + t * 8)
+        g = int(PALETTE["bg"][1] + t * 5)
+        b = int(PALETTE["bg"][2] + t * 20)
+        draw.line([(0, y), (w, y)], fill=(r, g, b))
+
+    img  = img.convert("RGBA")
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([0, 0, w, 6], fill=(*PALETTE["gold"], 255))
+    draw.rectangle([0, h - 6, w, h], fill=(*PALETTE["gold"], 255))
+
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(glow)
+    cx, cy = w // 2, h // 2
+    gd.ellipse([cx - 420, cy - 260, cx + 420, cy + 260], fill=(*PALETTE["gold"], 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=60))
+    img  = Image.alpha_composite(img, glow)
+    draw = ImageDraw.Draw(img)
+
+    draw.rounded_rectangle([cx - 480, cy - 240, cx + 480, cy + 240],
+                            radius=28, fill=(*PALETTE["bg2"], 235))
+
+    _draw_newspaper_icon(draw, cx, cy - 150, size=64)
+
+    draw.text((cx, cy - 60), top,
+              font=fonts["bold_lg"], fill=(*PALETTE["white"], 255), anchor="mm")
+
+    bottom_font = fonts["bold_xl"]
+    if draw.textbbox((0, 0), bottom, font=bottom_font)[2] > 900:
+        bottom_font = fonts["bold_lg"]
+    draw.text((cx, cy + 30), bottom,
+              font=bottom_font, fill=(*PALETTE["gold"], 255), anchor="mm")
+
+    _draw_gold_line(draw, cx - 80, cy + 95, cx + 80)
+
+    date_str = date_fr(datetime.now()).upper()
+    draw.text((cx, cy + 130), date_str,
+              font=fonts["regular_sm"], fill=(*PALETTE["gray"], 200), anchor="mm")
+
+    lines = _wrap(text, fonts["regular_md"], 760, draw)
+    y0 = cy + 175
+    for line in lines[:2]:
+        draw.text((cx, y0), line,
+                  font=fonts["regular_md"], fill=(*PALETTE["gray"], 190), anchor="mm")
+        y0 += 46
+
+    return np.array(img.convert("RGB"))
+
+
+def render_news_frame_landscape(seg: dict, photo_path: str, fonts: dict,
+                                w: int = LANDSCAPE_W, h: int = LANDSCAPE_H) -> np.ndarray:
+    """Frame news paysage : photo plein cadre 16:9 + bandeau texte bas,
+    même langage visuel que la version portrait."""
+    try:
+        photo = Image.open(photo_path).convert("RGB")
+        pw, ph = photo.size
+        ratio  = w / h
+        if pw / ph > ratio:
+            nw = int(ph * ratio)
+            photo = photo.crop([(pw - nw) // 2, 0, (pw - nw) // 2 + nw, ph])
+        else:
+            nh = int(pw / ratio)
+            photo = photo.crop([0, (ph - nh) // 2, pw, (ph - nh) // 2 + nh])
+        photo = photo.resize((w, h), Image.LANCZOS)
+    except Exception:
+        photo = Image.new("RGB", (w, h), PALETTE["bg"])
+
+    img = photo.convert("RGBA")
+
+    # Bandeau bas — plus compact en proportion que le portrait (le 16:9
+    # laisse déjà beaucoup moins de hauteur disponible en absolu)
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    grad_start = h - 340
+    for y in range(grad_start, h):
+        t     = (y - grad_start) / (h - grad_start)
+        alpha = int(225 * (t ** 0.7))
+        od.line([(0, y), (w, y)], fill=(*PALETTE["bg"], alpha))
+    img = Image.alpha_composite(img, overlay)
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([0, 0, w, 5], fill=(*PALETTE["gold"], 255))
+
+    n  = seg["index"]
+    cx, cy, r = 76, 100, 48
+    draw.ellipse([cx - r + 4, cy - r + 4, cx + r + 4, cy + r + 4], fill=(0, 0, 0, 90))
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*PALETTE["gold"], 240))
+    draw.text((cx, cy), str(n),
+              font=fonts["bold_md"], fill=(*PALETTE["bg"], 255), anchor="mm")
+
+    cat        = seg.get("categorie", "monde")
+    cat_tag    = cat.upper()
+    cat_accent = CATEGORY_ACCENT.get(cat, PALETTE["gold"])
+    bb         = draw.textbbox((0, 0), cat_tag, font=fonts["regular_sm"])
+    tag_text_w = bb[2] - bb[0]
+    tag_w      = tag_text_w + 50
+    tag_x      = w - tag_w - 24
+    draw.rounded_rectangle([tag_x, 20, w - 24, 60],
+                            radius=20, fill=(*PALETTE["bg2"], 225))
+    dot_cx = tag_x + 22
+    draw.ellipse([dot_cx - 6, 40 - 6, dot_cx + 6, 40 + 6], fill=(*cat_accent, 255))
+    draw.text((tag_x + 40, 40), cat_tag,
+              font=fonts["regular_sm"], fill=(*cat_accent, 255), anchor="lm")
+
+    pad = 60
+    y   = h - 240
+
+    title_lines = _wrap(seg["titre"], fonts["bold_lg"], w - pad * 2 - 40, draw)
+    for line in title_lines[:2]:
+        draw.text((pad + 5, y + 5), line,
+                  font=fonts["bold_lg"], fill=(0, 0, 0, 190))
+        draw.text((pad, y), line,
+                  font=fonts["bold_lg"], fill=(*PALETTE["white"], 255))
+        y += 66
+
+    _draw_gold_line(draw, pad, y + 6, pad + 100)
+    y += 24
+
+    if seg.get("source"):
+        dot_y = h - 50
+        draw.ellipse([pad, dot_y - 5, pad + 10, dot_y + 5], fill=(*PALETTE["gold"], 220))
+        draw.text((pad + 22, dot_y), seg['source'],
+                  font=fonts["regular_sm"], fill=(*PALETTE["gold"], 200), anchor="lm")
+
+    draw.rectangle([0, h - 5, w, h], fill=(*PALETTE["gold"], 255))
+
+    return np.array(img.convert("RGB"))
+
+
+def render_outro_landscape(text: str, fonts: dict, brand: str = "RÉCAP HEBDO",
+                           w: int = LANDSCAPE_W, h: int = LANDSCAPE_H) -> np.ndarray:
+    """Écran outro paysage — CTA abonnement, cohérent avec l'intro."""
+    img  = Image.new("RGB", (w, h), PALETTE["bg"])
+    draw = ImageDraw.Draw(img)
+
+    for y in range(h):
+        t = y / h
+        draw.line([(0, y), (w, y)],
+                  fill=(int(10 + t * 10), int(10 + t * 5), int(18 + t * 25)))
+
+    img  = img.convert("RGBA")
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([0, 0, w, 6], fill=(*PALETTE["gold"], 255))
+    draw.rectangle([0, h - 6, w, h], fill=(*PALETTE["gold"], 255))
+
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(glow)
+    cx, cy = w // 2, h // 2
+    gd.ellipse([cx - 400, cy - 240, cx + 400, cy + 240], fill=(*PALETTE["gold"], 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=60))
+    img  = Image.alpha_composite(img, glow)
+    draw = ImageDraw.Draw(img)
+
+    draw.rounded_rectangle([cx - 460, cy - 220, cx + 460, cy + 220],
+                            radius=28, fill=(*PALETTE["bg2"], 230))
+
+    _draw_newspaper_icon(draw, cx, cy - 140, size=58)
+    draw.text((cx, cy - 45), brand,
+              font=fonts["bold_md"], fill=(*PALETTE["white"], 255), anchor="mm")
+
+    _draw_gold_line(draw, cx - 90, cy - 5, cx + 90)
+
+    lines = _wrap(text, fonts["regular_md"], 760, draw)
+    y0 = cy + 30
+    for line in lines[:2]:
+        draw.text((cx, y0), line,
+                  font=fonts["regular_md"], fill=(*PALETTE["gray"], 200), anchor="mm")
+        y0 += 44
+
+    draw.text((cx, cy + 140),
               "LIKE  •  ABONNE-TOI  •  COMMENTE",
               font=fonts["regular_sm"], fill=(*PALETTE["gold"], 210), anchor="mm")
 
