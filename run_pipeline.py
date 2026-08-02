@@ -24,8 +24,9 @@ import news_video_generator as m
 parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
 parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
-parser.add_argument("--theme", default="journal", choices=["journal", "worldcup", "france"],
-                    help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026 | france = Spécial actu France")
+parser.add_argument("--theme", default="journal", choices=["journal", "worldcup", "france", "deepdive"],
+                    help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026 | "
+                         "france = Spécial actu France | deepdive = Zoom Sur (1 vidéo détaillée par sujet dominant)")
 args = parser.parse_args()
 
 # Mode demo : désactiver les APIs
@@ -44,13 +45,23 @@ if args.theme == "worldcup":
     print("▶ Édition SPÉCIAL COUPE DU MONDE 2026 ⚽")
 elif args.theme == "france":
     print("▶ Édition SPÉCIAL FRANCE 🇫🇷")
+elif args.theme == "deepdive":
+    print("▶ Édition ZOOM SUR 🔎 (une vidéo détaillée par sujet dominant du jour)")
 
 if args.top_n:
     m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
 
 # main() exécute TOUT le pipeline : news, photos, audio, vidéo,
 # mixage musique, validation, métadonnées — une seule source de vérité.
-video_path = m.main()
+# En mode 'deepdive', main() retourne une LISTE de chemins (une vidéo
+# par sujet) au lieu d'un chemin unique.
+result = m.main()
 
-size = os.path.getsize(video_path) / 1_000_000
-print(f'✅ Vidéo générée : {video_path} ({size:.1f}MB)')
+if isinstance(result, list):
+    total_mb = sum(os.path.getsize(p) for p in result) / 1_000_000
+    print(f'✅ {len(result)} vidéos générées ({total_mb:.1f}MB au total) :')
+    for p in result:
+        print(f'   - {p} ({os.path.getsize(p) / 1_000_000:.1f}MB)')
+else:
+    size = os.path.getsize(result) / 1_000_000
+    print(f'✅ Vidéo générée : {result} ({size:.1f}MB)')
