@@ -1,6 +1,10 @@
 name: ⚽ Générer Spécial Coupe du Monde
 
 on:
+  # ⚠️ Cron automatique désactivé — le journal principal (generate.yml)
+  # choisit désormais dynamiquement l'actualité la plus virale du moment,
+  # quelle qu'elle soit. Cette édition spéciale reste disponible en
+  # déclenchement manuel uniquement si besoin ponctuel.
   workflow_dispatch:
     inputs:
       mode:
@@ -11,12 +15,6 @@ on:
         options:
           - full
           - demo
-
-  # 10h UTC : les matchs du Mondial 2026 (USA/Mexique/Canada) se terminent
-  # tard en UTC — à 10h, tous les résultats de la veille sont publiés dans
-  # les feeds ET les affiches du jour sont connues.
-  schedule:
-    - cron: "0 10 * * *"
 
 concurrency:
   group: generate-worldcup
