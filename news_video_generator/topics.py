@@ -37,6 +37,52 @@ MIN_TOPICS = 2
 MAX_TOPICS = 4
 MIN_SOURCES_FOR_VIRAL = 2   # un sujet doit apparaître chez ≥2 sources distinctes
 
+# Mots vides français ignorés lors de la comparaison de titres de sujets
+# (voir _merge_similar_topics) — évite qu'un "de" ou "le" partagé compte
+# comme un vrai recouvrement thématique.
+_STOPWORDS_FR = {
+    "le", "la", "les", "de", "des", "du", "un", "une", "et", "en", "à",
+    "au", "aux", "dans", "sur", "pour", "avec", "d", "l", "ce", "cette",
+    "ces", "son", "sa", "ses", "qui", "que", "est",
+}
+
+
+def _topic_keywords(titre: str) -> set[str]:
+    """Mots significatifs (≥3 lettres, hors mots vides) d'un titre de
+    sujet, en minuscules — utilisé pour détecter les doublons thématiques."""
+    words = re.findall(r"[a-zàâäéèêëïîôöùûüç]+", titre.lower())
+    return {w for w in words if len(w) >= 3 and w not in _STOPWORDS_FR}
+
+
+def _merge_similar_topics(topics: list[dict], articles: list[dict]) -> list[dict]:
+    """Fusionne les sujets dont les titres se recoupent fortement (garde-fou
+    en plus de la consigne donnée à Groq) : si ≥50% des mots significatifs
+    du plus court titre se retrouvent dans l'autre, on considère qu'il
+    s'agit du même sujet et on combine leurs articles plutôt que de
+    produire deux vidéos quasi identiques."""
+    merged: list[dict] = []
+    for topic in topics:
+        kw = _topic_keywords(topic["titre_sujet"])
+        target = None
+        for m in merged:
+            mkw = _topic_keywords(m["titre_sujet"])
+            if not kw or not mkw:
+                continue
+            overlap = len(kw & mkw) / max(1, min(len(kw), len(mkw)))
+            if overlap >= 0.5:
+                target = m
+                break
+        if target:
+            target["indices"] = sorted(set(target["indices"]) | set(topic["indices"]))
+            target["nb_sources"] = len({articles[i]["source"] for i in target["indices"]})
+            # Garde le titre le plus court (généralement le plus général,
+            # donc le plus représentatif du sujet fusionné).
+            if len(topic["titre_sujet"]) < len(target["titre_sujet"]):
+                target["titre_sujet"] = topic["titre_sujet"]
+        else:
+            merged.append(dict(topic))
+    return merged
+
 
 def fetch_topic_pool(per_feed: int = 6) -> list[dict]:
     """Scrape un pool RSS plus large que le journal (plus d'articles par
@@ -82,6 +128,8 @@ Identifie les sujets d'actualité qui reviennent chez PLUSIEURS sources DIFFÉRE
 ATTENTION au piège des dossiers récurrents : certains sujets (conflits qui durent depuis des mois, prises d'otages anciennes, crises migratoires chroniques...) sont republiés régulièrement par plusieurs médias sans être une actualité NOUVELLE aujourd'hui — ce n'est PAS la même chose qu'un sujet viral du jour. Un sujet ne compte comme "recoupé" que si PLUSIEURS de ses articles sont RÉCENTS (idéalement moins de 24h, au pire moins de 48h) : si tous les articles qui en parlent ont plusieurs jours, ignore ce sujet même s'il apparaît chez plusieurs sources.
 
 Retourne entre 2 et 4 sujets maximum, ORDONNÉS du plus recoupé (le plus de sources différentes) au moins recoupé. N'invente aucun sujet arbitraire : base-toi uniquement sur les articles fournis. Si un sujet n'est mentionné que par une seule source, ne le retiens PAS (sauf si tu ne trouves vraiment aucun sujet avec ≥2 sources, auquel cas retourne les 2 sujets les plus solides que tu as, même mono-source, pour ne rien renvoyer de vide).
+
+ATTENTION aux doublons : si plusieurs articles parlent du même ÉVÉNEMENT ou de la même THÉMATIQUE générale même avec des titres différents (ex: "incendie dans le Var" et "incendie en Gironde" relèvent tous deux de la thématique "feux de forêt de l'été" ; "négociations à Bruxelles" et "sommet européen" peuvent être le même sommet), REGROUPE-LES dans un seul et même sujet plutôt que de créer deux sujets quasi identiques. Deux sujets distincts dans ta réponse doivent être clairement DIFFÉRENTS l'un de l'autre pour un spectateur — jamais deux variantes du même thème.
 
 Pour chaque sujet, liste les NUMÉROS des articles ci-dessus qui s'y rapportent (un article ne doit appartenir qu'à un seul sujet).
 
@@ -142,6 +190,13 @@ Réponds UNIQUEMENT avec ce JSON :
                         "indices": idxs,
                         "nb_sources": len(sources),
                     })
+
+                # Garde-fou en plus de la consigne donnée au modèle : fusionne
+                # les sujets dont les titres se recouvrent trop (ex: "incendie
+                # dans le Var" et "incendie en Gironde" sont la même thématique
+                # "feux de forêt" et ne doivent pas devenir 2 vidéos quasi
+                # identiques).
+                validated = _merge_similar_topics(validated, articles)
 
                 cross_sourced = [s for s in validated if s["nb_sources"] >= MIN_SOURCES_FOR_VIRAL]
                 cross_sourced.sort(key=lambda s: s["nb_sources"], reverse=True)
