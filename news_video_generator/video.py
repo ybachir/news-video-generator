@@ -15,8 +15,11 @@ from datetime import datetime
 
 from PIL import Image
 
-from .config import W, H
-from .render import render_intro, render_outro, render_news_frame, _fonts
+from .config import W, H, LANDSCAPE_W, LANDSCAPE_H
+from .render import (
+    render_intro, render_outro, render_news_frame, _fonts,
+    render_intro_landscape, render_outro_landscape, render_news_frame_landscape,
+)
 from .subtitles import build_ass
 
 
@@ -88,10 +91,11 @@ def mix_background_music(video_path: str, music_path: str,
     return True
 
 
-def validate_mp4(path: str) -> tuple[bool, str]:
+def validate_mp4(path: str, expected_w: int = W, expected_h: int = H) -> tuple[bool, str]:
     """
     Vérifie qu'un MP4 est lisible et non corrompu via ffprobe.
-    Retourne (ok, message).
+    Retourne (ok, message). `expected_w`/`expected_h` : résolution
+    attendue (portrait par défaut, paysage pour les vidéos longues).
     """
     cmd = [
         "ffprobe", "-v", "error",
@@ -113,8 +117,8 @@ def validate_mp4(path: str) -> tuple[bool, str]:
         dur    = float(s.get("duration", 0))
         if dur < 5:
             return False, f"Durée trop courte : {dur:.1f}s"
-        if w != W or h != H:
-            return False, f"Résolution incorrecte : {w}×{h} (attendu {W}×{H})"
+        if w != expected_w or h != expected_h:
+            return False, f"Résolution incorrecte : {w}×{h} (attendu {expected_w}×{expected_h})"
         return True, f"{codec} {w}×{h} {dur:.1f}s {os.path.getsize(path)/1e6:.1f}MB"
     except Exception as e:
         return False, f"Erreur parsing ffprobe : {e}"
@@ -132,6 +136,12 @@ def cleanup_frames(frames_dir: Path):
 def build_video(segments: list[dict], photo_paths: list[str],
                 script_data: dict, config: dict, output_dir: Path) -> str:
     print("\n🎬 ÉTAPE 4 — Assemblage et encodage de la vidéo...")
+
+    # Format paysage (16:9, vidéos longues YouTube) vs portrait (Shorts,
+    # comportement par défaut inchangé) — sélectionné via CONFIG["FORMAT"].
+    landscape = config.get("FORMAT") == "landscape"
+    width, height = (LANDSCAPE_W, LANDSCAPE_H) if landscape else (W, H)
+
     fonts      = _fonts()
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(exist_ok=True)
@@ -144,7 +154,11 @@ def build_video(segments: list[dict], photo_paths: list[str],
         dur   = seg.get("duration", 6.0) + 0.3
 
         if stype == "intro":
-            if config.get("EDITION_STYLE") == "worldcup":
+            if landscape:
+                frame = render_intro_landscape(seg["text"], fonts,
+                                               top=config.get("EDITION_TOP", "RÉCAP"),
+                                               bottom=config.get("EDITION_BOTTOM", "DE LA SEMAINE"))
+            elif config.get("EDITION_STYLE") == "worldcup":
                 from .render import render_intro_worldcup
                 frame = render_intro_worldcup(seg["text"], fonts,
                                               top=config.get("EDITION_TOP", "SPÉCIAL"),
@@ -154,11 +168,16 @@ def build_video(segments: list[dict], photo_paths: list[str],
                                      top=config.get("EDITION_TOP", "JOURNAL"),
                                      bottom=config.get("EDITION_BOTTOM", "DU MONDE"))
         elif stype == "outro":
-            frame = render_outro(seg["text"], fonts,
-                                 brand=config.get("EDITION_BRAND", "JOURNAL DU MONDE"))
+            if landscape:
+                frame = render_outro_landscape(seg["text"], fonts,
+                                               brand=config.get("EDITION_BRAND", "RÉCAP HEBDO"))
+            else:
+                frame = render_outro(seg["text"], fonts,
+                                     brand=config.get("EDITION_BRAND", "JOURNAL DU MONDE"))
         else:
             photo_p = photo_map.get(seg["index"], list(photo_map.values())[0])
-            frame   = render_news_frame(seg, photo_p, fonts)
+            frame   = (render_news_frame_landscape(seg, photo_p, fonts) if landscape
+                      else render_news_frame(seg, photo_p, fonts))
 
         frame_path = str(frames_dir / f"frame_{idx:02d}.png")
         Image.fromarray(frame).save(frame_path)
@@ -196,9 +215,9 @@ def build_video(segments: list[dict], photo_paths: list[str],
         ass_path = None
         words = seg.get("words", [])
         if words and dur > 1:
-            ass_path = build_ass(words, frames_dir / f"subs_{i:02d}.ass")
+            ass_path = build_ass(words, frames_dir / f"subs_{i:02d}.ass", w=width, h=height)
 
-        vf_parts = [f"scale={W}:{H}"]
+        vf_parts = [f"scale={width}:{height}"]
 
         # Ken Burns (zoom lent) uniquement sur les news, pas intro/outro
         # (qui sont des cartes/logos, pas des photos) : casse l'effet figé
@@ -210,10 +229,10 @@ def build_video(segments: list[dict], photo_paths: list[str],
             zoom_rate = min(0.10, 0.9 / n_frames)   # zoom total borné à ~+10%
             if i % 2 == 0:
                 # Zoom in : part de 1.0, grossit doucement
-                zoom_expr = f"zoompan=z='min(zoom+{zoom_rate:.5f},1.10)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={fps}"
+                zoom_expr = f"zoompan=z='min(zoom+{zoom_rate:.5f},1.10)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}"
             else:
                 # Zoom out : part déjà zoomé, revient doucement vers 1.0
-                zoom_expr = f"zoompan=z='if(eq(on,0),1.10,max(zoom-{zoom_rate:.5f},1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={fps}"
+                zoom_expr = f"zoompan=z='if(eq(on,0),1.10,max(zoom-{zoom_rate:.5f},1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps}"
             vf_parts.append(zoom_expr)
 
         vf_parts += [
@@ -322,7 +341,7 @@ def build_video(segments: list[dict], photo_paths: list[str],
         raise RuntimeError(f"Concaténation ffmpeg échouée : {r.stderr[-300:]}")
 
     # ── Validation MP4 ──
-    ok, msg = validate_mp4(out_path)
+    ok, msg = validate_mp4(out_path, expected_w=width, expected_h=height)
     if ok:
         print(f"  ✅ Vidéo validée : {msg}")
     else:
