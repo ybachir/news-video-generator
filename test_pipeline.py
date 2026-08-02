@@ -247,6 +247,28 @@ def test_deepdive_demo():
     assert len(slugs) == len(topics), "Les slugs des sujets doivent être uniques"
 
 
+@test("Fusion des sujets deepdive quasi-identiques (anti-doublon)")
+def test_merge_similar_topics():
+    import news_video_generator as m
+    articles = [
+        {"source": "A", "titre_brut": "Incendie dans le Var", "desc_brute": "..."},
+        {"source": "B", "titre_brut": "Feu de forêt en Gironde", "desc_brute": "..."},
+        {"source": "C", "titre_brut": "Crise migratoire à Ceuta", "desc_brute": "..."},
+        {"source": "D", "titre_brut": "Sommet européen à Ceuta", "desc_brute": "..."},
+    ]
+    topics = [
+        {"titre_sujet": "Incendie dans le Var", "indices": [0], "nb_sources": 1},
+        {"titre_sujet": "Incendie de forêt en Gironde", "indices": [1], "nb_sources": 1},
+        {"titre_sujet": "Crise migratoire à Ceuta", "indices": [2, 3], "nb_sources": 2},
+    ]
+    merged = m._merge_similar_topics(topics, articles)
+    titres = [t["titre_sujet"] for t in merged]
+    assert len(merged) == 2, f"Attendu 2 sujets après fusion, obtenu {len(merged)} : {titres}"
+    incendie = next(t for t in merged if "ncendie" in t["titre_sujet"] or "eu de" in t["titre_sujet"])
+    assert set(incendie["indices"]) == {0, 1}
+    print(f"    → {len(topics)} sujets bruts fusionnés en {len(merged)}")
+
+
 @test("Normalisation vocale (scores, abréviations)")
 def test_speech():
     import news_video_generator as m
@@ -413,6 +435,7 @@ def main():
     test_worldcup_demo()
     test_france_demo()
     test_deepdive_demo()
+    test_merge_similar_topics()
     test_subtitles_ass()
     test_photo_scoring()
     test_transition_coherence()
