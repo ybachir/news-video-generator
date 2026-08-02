@@ -40,9 +40,11 @@ WEEKLY_MIN_SEGMENTS = 8
 WEEKLY_MAX_SEGMENTS = 20
 
 
-def fetch_weekly_france_pool(per_feed: int = 20) -> list[dict]:
+def fetch_weekly_france_pool(per_feed: int = 12) -> list[dict]:
     """Scrape les flux France sur 7 jours (plus d'articles par source que
-    le journal quotidien, fenêtre de fraîcheur élargie à WEEKLY_MAX_AGE_HOURS)."""
+    le journal quotidien, fenêtre de fraîcheur élargie à WEEKLY_MAX_AGE_HOURS).
+    `per_feed` volontairement modéré (12, pas 20+) : au-delà, le prompt
+    Groq grossit inutilement et augmente le risque de réponse tronquée."""
     print("  🇫🇷 Scraping RSS France (fenêtre 7 jours)...")
     per_source: dict[str, list[dict]] = {}
     with ThreadPoolExecutor(max_workers=len(FR_RSS_FEEDS)) as ex:
@@ -94,9 +96,16 @@ def structure_weekly_with_groq(articles: list[dict], api_key: str) -> dict | Non
     if not api_key:
         return None
 
+    # Cap défensif : au-delà d'une centaine d'articles, le prompt devient
+    # inutilement long sans vraiment améliorer le récap (Groq doit de
+    # toute façon dédupliquer/résumer) — et ça augmente le risque de
+    # réponse tronquée. On garde les plus récents en priorité.
+    if len(articles) > 100:
+        articles = sorted(articles, key=lambda a: a.get("age_heures") or 999)[:100]
+
     today = date_fr(datetime.now())
     articles_txt = "\n".join(
-        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:150]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:120]}"
         for i, a in enumerate(articles)
     )
 
@@ -145,6 +154,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
 }}"""
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    print(f"    ℹ️  Prompt : {len(articles)} articles envoyés à Groq")
 
     for model in GROQ_MODELS:
         for attempt in (1, 2):
@@ -158,25 +168,33 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
             try:
                 r = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers, json=body, timeout=60
+                    headers=headers, json=body, timeout=90
                 )
                 if r.status_code == 429:
                     import time as _t; _t.sleep(3 * attempt)
                     continue
                 if r.status_code != 200:
-                    print(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:150]}")
+                    print(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:300]}")
                     break
-                raw = r.json()["choices"][0]["message"]["content"].strip()
-                raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
+                raw_full = r.json()["choices"][0]["message"]["content"].strip()
+                finish_reason = r.json()["choices"][0].get("finish_reason", "?")
+                raw = re.sub(r"```json\s*|\s*```", "", raw_full).strip()
                 match = re.search(r'\{.*\}', raw, re.DOTALL)
-                if match:
+                if not match:
+                    print(f"  ⚠️  Réponse Groq sans JSON exploitable (finish_reason={finish_reason}, {len(raw)} caractères)")
+                    continue
+                try:
                     result = json.loads(match.group(0))
-                    if result.get("news"):
-                        result["news"] = _dedupe_weekly_segments(result["news"])
-                        print(f"  ✅ {len(result['news'])} segments récap hebdo via Groq ({model})")
-                        return result
+                except json.JSONDecodeError as je:
+                    print(f"  ⚠️  JSON invalide (finish_reason={finish_reason}, probablement tronqué) : {je}")
+                    continue
+                if result.get("news"):
+                    result["news"] = _dedupe_weekly_segments(result["news"])
+                    print(f"  ✅ {len(result['news'])} segments récap hebdo via Groq ({model})")
+                    return result
+                print(f"  ⚠️  JSON valide mais champ 'news' vide/absent ({model})")
             except Exception as e:
-                print(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {e}")
+                print(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {type(e).__name__}: {e}")
     return None
 
 
@@ -186,18 +204,24 @@ def get_weekly_france_news(config: dict) -> dict:
 
     pool = fetch_weekly_france_pool()
 
-    if config["GROQ_API_KEY"] and pool:
-        print("  🤖 Structuration du récap via Groq...")
-        result = structure_weekly_with_groq(pool, config["GROQ_API_KEY"])
-        if result and len(result.get("news", [])) >= 3:
-            news = result["news"][:WEEKLY_MAX_SEGMENTS]
-            result["news"] = news
-            print(f"\n📋 Récap de la semaine ({len(news)} segments) :")
-            for i, item in enumerate(news, 1):
-                print(f"  {i:2}. [{item.get('source','?')}] {item['titre'][:65]}")
-            return result
+    if not config["GROQ_API_KEY"]:
+        print("  ⚠️  Pas de clé Groq → récap de démo")
+        return _demo_weekly()
+    if not pool:
+        print("  ⚠️  Aucun article RSS collecté sur 7 jours → récap de démo")
+        return _demo_weekly()
 
-    print("  ⚠️  Groq/RSS indisponible → récap de démo")
+    print("  🤖 Structuration du récap via Groq...")
+    result = structure_weekly_with_groq(pool, config["GROQ_API_KEY"])
+    if result and len(result.get("news", [])) >= 3:
+        news = result["news"][:WEEKLY_MAX_SEGMENTS]
+        result["news"] = news
+        print(f"\n📋 Récap de la semaine ({len(news)} segments) :")
+        for i, item in enumerate(news, 1):
+            print(f"  {i:2}. [{item.get('source','?')}] {item['titre'][:65]}")
+        return result
+
+    print(f"  ⚠️  Structuration Groq échouée ou insuffisante ({len(result.get('news', [])) if result else 0} segments) → récap de démo")
     return _demo_weekly()
 
 
