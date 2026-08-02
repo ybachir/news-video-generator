@@ -2,7 +2,11 @@ name: 📤 Publier Journal Vidéo
 
 on:
   workflow_run:
-    workflows: ["📰 Générer Journal Vidéo", "⚽ Générer Spécial Coupe du Monde"]
+    workflows:
+      - "📰 Générer Journal Vidéo"
+      - "⚽ Générer Spécial Coupe du Monde"
+      - "🇫🇷 Générer Spécial France"
+      - "🔎 Générer Zoom Sur (deepdive)"
     types: [completed]
 
 jobs:
@@ -25,9 +29,8 @@ jobs:
       YOUTUBE_CLIENT_JSON: ${{ secrets.YOUTUBE_CLIENT_JSON }}
       INSTAGRAM_USER_ID:   ${{ secrets.INSTAGRAM_USER_ID }}
       INSTAGRAM_TOKEN:     ${{ secrets.INSTAGRAM_TOKEN }}
-      # URL publique du MP4 exigée par Meta : la release "latest" publiée
-      # par generate.yml fournit une URL stable — plus besoin de CDN externe.
-      VIDEO_PUBLIC_URL:    https://github.com/${{ github.repository }}/releases/download/latest/journal_latest.mp4
+      WORKFLOW_NAME:       ${{ github.event.workflow_run.name }}
+      REPO:                ${{ github.repository }}
 
     steps:
       - name: 📥 Checkout
@@ -56,41 +59,61 @@ jobs:
           path: downloaded
           merge-multiple: true
 
-      - name: 🔍 Localiser le MP4 téléchargé
-        id: locate
+      - name: 📤 Publier chaque vidéo générée
         run: |
-          MP4=$(find downloaded -name "*.mp4" | head -1)
-          if [ -z "$MP4" ]; then
+          # Détermine la release GitHub (tag + préfixe des assets) selon le
+          # workflow qui a déclenché cette publication — nécessaire pour
+          # construire l'URL publique correcte (exigée par Instagram/Meta),
+          # différente pour chaque édition.
+          case "$WORKFLOW_NAME" in
+            "📰 Générer Journal Vidéo")
+              RELEASE_TAG="latest"; ASSET_PREFIX="journal_latest"; MULTI="false" ;;
+            "⚽ Générer Spécial Coupe du Monde")
+              RELEASE_TAG="worldcup-latest"; ASSET_PREFIX="mondial_latest"; MULTI="false" ;;
+            "🇫🇷 Générer Spécial France")
+              RELEASE_TAG="france-latest"; ASSET_PREFIX="france_latest"; MULTI="false" ;;
+            "🔎 Générer Zoom Sur (deepdive)")
+              RELEASE_TAG="deepdive-latest"; ASSET_PREFIX="sujet"; MULTI="true" ;;
+            *)
+              echo "❌ Workflow déclencheur inconnu : $WORKFLOW_NAME"; exit 1 ;;
+          esac
+
+          shopt -s globstar nullglob
+          MP4S=(downloaded/**/*.mp4)
+          if [ ${#MP4S[@]} -eq 0 ]; then
             echo "❌ Aucun MP4 trouvé dans l'artifact"
             exit 1
           fi
-          echo "Vidéo trouvée : $MP4 ($(du -h "$MP4" | cut -f1))"
-          echo "video_path=$MP4" >> "$GITHUB_OUTPUT"
+          echo "🎬 ${#MP4S[@]} vidéo(s) à publier depuis « $WORKFLOW_NAME »"
 
-      - name: 📺 Publier sur YouTube
-        if: ${{ env.YOUTUBE_TOKEN_JSON != '' }}
-        run: |
-          python3 publish.py --video "${{ steps.locate.outputs.video_path }}" --platform youtube
+          I=0
+          for MP4 in "${MP4S[@]}"; do
+            I=$((I+1))
+            echo ""
+            echo "════════ Vidéo $I/${#MP4S[@]} : $MP4 ════════"
 
-      - name: ⏭️ YouTube ignoré (secrets absents)
-        if: ${{ env.YOUTUBE_TOKEN_JSON == '' }}
-        run: |
-          echo "⚠️ YOUTUBE_TOKEN_JSON absent — publication ignorée."
-          echo "   Génère le token avec generate_youtube_token.py (en local) puis"
-          echo "   ajoute YOUTUBE_TOKEN_JSON et YOUTUBE_CLIENT_JSON dans les secrets."
+            # URL publique de CETTE vidéo précise dans la release —
+            # correspond exactement au nom d'asset publié par le workflow
+            # de génération (sujet1.mp4, sujet2.mp4... pour deepdive, un
+            # seul asset fixe pour les éditions mono-vidéo).
+            if [ "$MULTI" = "true" ]; then
+              PUBLIC_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${ASSET_PREFIX}${I}.mp4"
+            else
+              PUBLIC_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${ASSET_PREFIX}.mp4"
+            fi
 
-      - name: 📸 Publier sur Instagram Reels
-        if: ${{ env.INSTAGRAM_TOKEN != '' }}
-        run: |
-          python3 publish.py --video "${{ steps.locate.outputs.video_path }}" \
-            --platform instagram --public-url "$VIDEO_PUBLIC_URL"
+            if [ -n "$YOUTUBE_TOKEN_JSON" ]; then
+              python3 publish.py --video "$MP4" --platform youtube || echo "⚠️ Échec YouTube pour $MP4"
+            else
+              echo "⏭️ YouTube ignoré (YOUTUBE_TOKEN_JSON absent — génère-le via generate_youtube_token.py en local)"
+            fi
 
-      - name: ⏭️ Instagram ignoré (secrets absents)
-        if: ${{ env.INSTAGRAM_TOKEN == '' }}
-        run: |
-          echo "⚠️ INSTAGRAM_TOKEN absent — publication Reels ignorée."
-          echo "   Crée un compte Instagram Business + app Meta, puis ajoute"
-          echo "   INSTAGRAM_USER_ID et INSTAGRAM_TOKEN dans les secrets."
+            if [ -n "$INSTAGRAM_TOKEN" ]; then
+              python3 publish.py --video "$MP4" --platform instagram --public-url "$PUBLIC_URL" || echo "⚠️ Échec Instagram pour $MP4"
+            else
+              echo "⏭️ Instagram ignoré (INSTAGRAM_TOKEN absent — nécessite un compte Business + app Meta)"
+            fi
+          done
 
       - name: 📊 Résumé
         if: always()
