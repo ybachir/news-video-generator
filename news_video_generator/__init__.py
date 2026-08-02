@@ -40,7 +40,7 @@ from datetime import datetime
 # ── Réexport de l'API publique (ordre = ordre des étapes du pipeline) ──
 from .config import (
     CONFIG, PALETTE, CATEGORY_COLORS, CATEGORY_ACCENT, CATEGORY_EN,
-    W, H, date_fr,
+    W, H, LANDSCAPE_W, LANDSCAPE_H, date_fr,
 )
 from .news import (
     RSS_FEEDS, fetch_rss_raw, structure_with_groq, get_news, _demo_news,
@@ -58,13 +58,14 @@ from .audio import (
 from .render import (
     _fonts, _wrap, _draw_gold_line, _draw_newspaper_icon,
     render_intro, render_news_frame, render_outro,
+    render_intro_landscape, render_news_frame_landscape, render_outro_landscape,
 )
 from .subtitles import _sanitize_word_timings, build_ass
 from .video import (
     get_music_path, mix_background_music, validate_mp4, cleanup_frames,
     build_video,
 )
-from .metadata import build_metadata, save_metadata
+from .metadata import build_metadata, save_metadata, BRAND_HASHTAG, ALWAYS_ON_HASHTAGS
 from .speech import humanize_for_speech, humanize_script
 from .worldcup import (
     WC_RSS_FEEDS, fetch_worldcup_rss, structure_worldcup_with_groq,
@@ -79,23 +80,31 @@ from .topics import (
     structure_topic_deepdive_with_groq, get_daily_deepdive_scripts, _demo_topics,
     _merge_similar_topics,
 )
+from .weekly import (
+    WEEKLY_MAX_AGE_HOURS, WEEKLY_MIN_SEGMENTS, WEEKLY_MAX_SEGMENTS,
+    fetch_weekly_france_pool, structure_weekly_with_groq,
+    get_weekly_france_news, _demo_weekly,
+)
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
-    "W", "H", "date_fr",
+    "W", "H", "LANDSCAPE_W", "LANDSCAPE_H", "date_fr",
     "RSS_FEEDS", "fetch_rss_raw", "structure_with_groq", "get_news",
     "RSS_MAX_AGE_HOURS", "_fmt_age_fr",
     "SENSITIVE_TERMS", "find_best_photo", "create_styled_background", "get_photos",
     "EDGE_TTS_VOICE", "EDGE_TTS_RATE", "EDGE_TTS_RETRIES", "EDGE_TTS_TIMEOUT",
     "text_to_wav_edge", "text_to_wav_espeak", "wav_to_mp3", "make_audio", "generate_all_audio",
     "render_intro", "render_news_frame", "render_outro",
+    "render_intro_landscape", "render_news_frame_landscape", "render_outro_landscape",
     "build_ass",
     "get_music_path", "mix_background_music", "validate_mp4", "cleanup_frames", "build_video",
-    "build_metadata", "save_metadata",
+    "build_metadata", "save_metadata", "BRAND_HASHTAG", "ALWAYS_ON_HASHTAGS",
     "humanize_for_speech", "humanize_script",
     "WC_RSS_FEEDS", "get_worldcup_news",
     "FR_RSS_FEEDS", "get_france_news",
     "MIN_TOPICS", "MAX_TOPICS", "get_daily_deepdive_scripts",
+    "WEEKLY_MAX_AGE_HOURS", "WEEKLY_MIN_SEGMENTS", "WEEKLY_MAX_SEGMENTS",
+    "get_weekly_france_news",
     "main",
 ]
 
@@ -146,7 +155,7 @@ def _run_pipeline_for_script(script_data: dict, config: dict, output_dir: Path) 
 
     # 6. Métadonnées de publication (titre YouTube, description, caption IG)
     print("\n📝 ÉTAPE 6 — Métadonnées de publication...")
-    save_metadata(script_data, video_path, output_dir)
+    save_metadata(script_data, video_path, output_dir, config)
 
     return video_path
 
@@ -227,7 +236,7 @@ def main():
     output_dir = Path(CONFIG["OUTPUT_DIR"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. News — thème standard (journal) ou édition spéciale (worldcup / france)
+    # 1. News — thème standard (journal) ou édition spéciale (worldcup / france / weekly)
     if theme == "worldcup":
         CONFIG.setdefault("EDITION_TOP",    "SPÉCIAL")
         CONFIG.setdefault("EDITION_BOTTOM", "MONDIAL 2026")
@@ -241,6 +250,15 @@ def main():
         CONFIG.setdefault("EDITION_BRAND",  "SPÉCIAL FRANCE")
         CONFIG.setdefault("FILE_PREFIX",    "france")
         script_data = get_france_news(CONFIG)
+    elif theme == "weekly":
+        # Vidéo YouTube LONGUE (pas un Short) : format paysage 16:9,
+        # aussi longue que nécessaire pour couvrir toute la semaine.
+        CONFIG.setdefault("EDITION_TOP",    "RÉCAP")
+        CONFIG.setdefault("EDITION_BOTTOM", "DE LA SEMAINE")
+        CONFIG.setdefault("EDITION_BRAND",  "RÉCAP HEBDO")
+        CONFIG.setdefault("FILE_PREFIX",    "hebdo")
+        CONFIG.setdefault("FORMAT",         "landscape")
+        script_data = get_weekly_france_news(CONFIG)
     else:
         # Identité "nouvelle génération" : positionnement des chaînes d'actu
         # les plus vues (l'essentiel, rapide, accessible) — design original
