@@ -21,7 +21,7 @@ from datetime import datetime
 import requests
 
 from .config import date_fr
-from .news import _fetch_one_feed, GROQ_MODELS
+from .news import _fetch_one_feed, GROQ_MODELS, _fmt_age_fr
 
 # Feeds sport/football uniquement. La collecte parallèle de news.py
 # tolère les feeds morts — on en met large.
@@ -68,7 +68,7 @@ def structure_worldcup_with_groq(articles: list[dict], api_key: str) -> dict | N
 
     today = date_fr(datetime.now())
     articles_txt = "\n".join(
-        f"{i+1}. [{a['source']}] {a['titre_brut']} — {a['desc_brute'][:150]}"
+        f"{i+1}. [{a['source']}, {_fmt_age_fr(a.get('age_heures'))}] {a['titre_brut']} — {a['desc_brute'][:150]}"
         for i, a in enumerate(articles)
     )
 
