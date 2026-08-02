@@ -11,7 +11,7 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
-from .config import W, H, PALETTE, CATEGORY_COLORS, CATEGORY_EN
+from .config import W, H, LANDSCAPE_W, LANDSCAPE_H, PALETTE, CATEGORY_COLORS, CATEGORY_EN
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -34,12 +34,13 @@ VISION_MODELS = [
 _working_vision_model = [None]   # cache du modèle qui répond
 
 
-def _search_candidates(query: str, api_key: str, per_page: int = 10) -> list[dict]:
+def _search_candidates(query: str, api_key: str, per_page: int = 10,
+                       orientation: str = "portrait") -> list[dict]:
     """Recherche Unsplash et retourne les candidats avec leurs métadonnées."""
     try:
         r = requests.get(
             "https://api.unsplash.com/search/photos",
-            params={"query": query, "orientation": "portrait",
+            params={"query": query, "orientation": orientation,
                     "content_filter": "high", "per_page": per_page},
             headers={"Authorization": f"Client-ID {api_key}"},
             timeout=12
@@ -141,13 +142,15 @@ def _filter_sensitive_keywords(keywords: list[str]) -> list[str]:
 
 def find_best_photo(item: dict, api_key: str, groq_key: str, path: str,
                     category: str | None = None,
-                    used_ids: set | None = None) -> bool:
+                    used_ids: set | None = None,
+                    orientation: str = "portrait") -> bool:
     """Sélection intelligente : requête de scène → scoring → vision.
 
     Cascade de requêtes : photo_query (scène précise) → mots-clés →
     catégorie. À chaque étage, les candidats sont classés par score
     lexical ; les 3 meilleurs passent la validation vision Groq.
-    `used_ids` évite de réutiliser la même photo sur deux sujets."""
+    `used_ids` évite de réutiliser la même photo sur deux sujets.
+    `orientation` : "portrait" (Shorts) ou "landscape" (vidéos longues)."""
     if not api_key:
         print("  ⚠️  Unsplash : UNSPLASH_KEY absente/vide — fond généré utilisé")
         return False
@@ -169,7 +172,7 @@ def find_best_photo(item: dict, api_key: str, groq_key: str, path: str,
     queries = [q for q in queries if q and not (q in seen or seen.add(q))]
 
     for qi, query in enumerate(queries):
-        candidates = _search_candidates(query, api_key)
+        candidates = _search_candidates(query, api_key, orientation=orientation)
         candidates = [c for c in candidates if c.get("id") not in used_ids]
         if not candidates:
             continue
@@ -196,29 +199,31 @@ def find_best_photo(item: dict, api_key: str, groq_key: str, path: str,
     return False
 
 
-def create_styled_background(keywords: list[str], category: str, number: int, path: str):
-    """Fond premium : dégradé sombre + cercles lumineux + numéro discret."""
-    img  = Image.new("RGB", (W, H))
+def create_styled_background(keywords: list[str], category: str, number: int,
+                             path: str, w: int = W, h: int = H):
+    """Fond premium : dégradé sombre + cercles lumineux + numéro discret.
+    `w`/`h` : résolution cible (portrait par défaut, paysage si fourni)."""
+    img  = Image.new("RGB", (w, h))
     draw = ImageDraw.Draw(img)
 
     base   = PALETTE["bg"]
     accent = CATEGORY_COLORS.get(category, CATEGORY_COLORS["monde"])
 
     # Dégradé vertical bg → accent sombre
-    for y in range(H):
-        t = (y / H) ** 1.4
+    for y in range(h):
+        t = (y / h) ** 1.4
         r = int(base[0] + t * (accent[0] - base[0]))
         g = int(base[1] + t * (accent[1] - base[1]))
         b = int(base[2] + t * (accent[2] - base[2]))
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
+        draw.line([(0, y), (w, y)], fill=(r, g, b))
 
     # Halos lumineux
     rng = random.Random(number * 37)
     for _ in range(4):
-        cx  = rng.randint(0, W)
-        cy  = rng.randint(0, H // 2)
+        cx  = rng.randint(0, w)
+        cy  = rng.randint(0, h // 2)
         rad = rng.randint(150, 380)
-        overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         od = ImageDraw.Draw(overlay)
         od.ellipse([cx - rad, cy - rad, cx + rad, cy + rad],
                    fill=(*[min(255, c + 50) for c in accent], 25))
@@ -232,7 +237,7 @@ def create_styled_background(keywords: list[str], category: str, number: int, pa
     except Exception:
         font_big = ImageFont.load_default()
 
-    draw.text((W // 2, H // 2 - 80), str(number),
+    draw.text((w // 2, h // 2 - 80), str(number),
               font=font_big, fill=(*PALETTE["white"], 12), anchor="mm")
 
     img.save(path, "JPEG", quality=92)
@@ -241,6 +246,9 @@ def create_styled_background(keywords: list[str], category: str, number: int, pa
 def get_photos(script_data: dict, config: dict, photos_dir: Path) -> list[str]:
     print("\n🖼️  ÉTAPE 2 — Récupération des visuels...")
     photos_dir.mkdir(exist_ok=True)
+    landscape   = config.get("FORMAT") == "landscape"
+    orientation = "landscape" if landscape else "portrait"
+    bg_w, bg_h  = (LANDSCAPE_W, LANDSCAPE_H) if landscape else (W, H)
     paths = []
     used_ids: set = set()     # anti-doublons : jamais 2x la même photo
     for i, item in enumerate(script_data["news"]):
@@ -252,11 +260,11 @@ def get_photos(script_data: dict, config: dict, photos_dir: Path) -> list[str]:
         ok = find_best_photo(item, config["UNSPLASH_KEY"],
                              config.get("GROQ_API_KEY", ""), path,
                              category=CATEGORY_EN.get(cat, "world news"),
-                             used_ids=used_ids)
+                             used_ids=used_ids, orientation=orientation)
         if ok:
             print(f"  🖼️  #{n:2} Unsplash OK  [{cat}]")
         else:
-            create_styled_background(kws, cat, n, path)
+            create_styled_background(kws, cat, n, path, w=bg_w, h=bg_h)
             print(f"  🎨 #{n:2} Fond premium [{cat}]")
 
         paths.append(path)
