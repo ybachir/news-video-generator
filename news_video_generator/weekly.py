@@ -22,6 +22,7 @@ photos/audio/vidéo/métadonnées sont réutilisés tels quels.
 import re
 import json
 from datetime import datetime
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -38,6 +39,25 @@ WEEKLY_MAX_AGE_HOURS = 24 * 7
 
 WEEKLY_MIN_SEGMENTS = 8
 WEEKLY_MAX_SEGMENTS = 20
+
+# Log de debug persistant : les logs console des runners GitHub Actions
+# ne sont pas toujours accessibles pour le diagnostic à distance — ce
+# fichier est écrit dans output/ et inclus dans la release pour pouvoir
+# être inspecté après coup en cas de fallback inattendu vers la démo.
+_debug_lines: list[str] = []
+
+
+def _dbg(msg: str):
+    _debug_lines.append(msg)
+    print(msg)
+
+
+def _write_debug_log(config: dict):
+    try:
+        path = Path(config.get("OUTPUT_DIR", "./output")) / "weekly_debug.log"
+        path.write_text("\n".join(_debug_lines), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def fetch_weekly_france_pool(per_feed: int = 12) -> list[dict]:
@@ -64,7 +84,9 @@ def fetch_weekly_france_pool(per_feed: int = 12) -> list[dict]:
             results.append(art)
 
     ok = sum(1 for v in per_source.values() if v)
-    print(f"  ✅ {len(results)} articles collectés sur 7 jours ({ok}/{len(FR_RSS_FEEDS)} sources OK)")
+    _dbg(f"  ✅ {len(results)} articles collectés sur 7 jours ({ok}/{len(FR_RSS_FEEDS)} sources OK)")
+    for s, arts in per_source.items():
+        _dbg(f"    · {s} : {len(arts)} article(s)")
     return results
 
 
@@ -154,7 +176,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
 }}"""
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    print(f"    ℹ️  Prompt : {len(articles)} articles envoyés à Groq")
+    _dbg(f"    ℹ️  Prompt : {len(articles)} articles envoyés à Groq")
 
     for model in GROQ_MODELS:
         for attempt in (1, 2):
@@ -171,57 +193,70 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
                     headers=headers, json=body, timeout=90
                 )
                 if r.status_code == 429:
+                    _dbg(f"  ⚠️  Groq 429 rate-limit ({model}, essai {attempt})")
                     import time as _t; _t.sleep(3 * attempt)
                     continue
                 if r.status_code != 200:
-                    print(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:300]}")
+                    _dbg(f"  ⚠️  Groq HTTP {r.status_code} ({model}) : {r.text[:500]}")
                     break
-                raw_full = r.json()["choices"][0]["message"]["content"].strip()
-                finish_reason = r.json()["choices"][0].get("finish_reason", "?")
+                resp_json = r.json()
+                raw_full = resp_json["choices"][0]["message"]["content"].strip()
+                finish_reason = resp_json["choices"][0].get("finish_reason", "?")
+                usage = resp_json.get("usage", {})
+                _dbg(f"    ℹ️  Réponse Groq ({model}) : finish_reason={finish_reason}, "
+                     f"tokens={usage.get('completion_tokens','?')}/{usage.get('total_tokens','?')}, "
+                     f"{len(raw_full)} caractères")
                 raw = re.sub(r"```json\s*|\s*```", "", raw_full).strip()
                 match = re.search(r'\{.*\}', raw, re.DOTALL)
                 if not match:
-                    print(f"  ⚠️  Réponse Groq sans JSON exploitable (finish_reason={finish_reason}, {len(raw)} caractères)")
+                    _dbg(f"  ⚠️  Aucun JSON exploitable dans la réponse. Extrait : {raw[:400]!r}")
                     continue
                 try:
                     result = json.loads(match.group(0))
                 except json.JSONDecodeError as je:
-                    print(f"  ⚠️  JSON invalide (finish_reason={finish_reason}, probablement tronqué) : {je}")
+                    _dbg(f"  ⚠️  JSON invalide ({je}). Fin de la réponse : {raw[-300:]!r}")
                     continue
                 if result.get("news"):
+                    nb_avant = len(result["news"])
                     result["news"] = _dedupe_weekly_segments(result["news"])
-                    print(f"  ✅ {len(result['news'])} segments récap hebdo via Groq ({model})")
+                    _dbg(f"  ✅ {nb_avant} segments générés, {len(result['news'])} après dédoublonnage ({model})")
                     return result
-                print(f"  ⚠️  JSON valide mais champ 'news' vide/absent ({model})")
+                _dbg(f"  ⚠️  JSON valide mais champ 'news' vide/absent ({model}). Clés reçues : {list(result.keys())}")
             except Exception as e:
-                print(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {type(e).__name__}: {e}")
+                _dbg(f"  ⚠️  Groq erreur ({model}, essai {attempt}) : {type(e).__name__}: {e}")
     return None
 
 
 def get_weekly_france_news(config: dict) -> dict:
     """Pipeline de collecte du récap hebdomadaire France."""
-    print("\n📅 ÉTAPE 1 — Collecte du récap hebdomadaire France (7 jours)...")
+    _debug_lines.clear()
+    _dbg("\n📅 ÉTAPE 1 — Collecte du récap hebdomadaire France (7 jours)...")
 
     pool = fetch_weekly_france_pool()
 
     if not config["GROQ_API_KEY"]:
-        print("  ⚠️  Pas de clé Groq → récap de démo")
+        _dbg("  ⚠️  Pas de clé Groq → récap de démo")
+        _write_debug_log(config)
         return _demo_weekly()
     if not pool:
-        print("  ⚠️  Aucun article RSS collecté sur 7 jours → récap de démo")
+        _dbg("  ⚠️  Aucun article RSS collecté sur 7 jours → récap de démo")
+        _write_debug_log(config)
         return _demo_weekly()
 
-    print("  🤖 Structuration du récap via Groq...")
+    _dbg("  🤖 Structuration du récap via Groq...")
     result = structure_weekly_with_groq(pool, config["GROQ_API_KEY"])
     if result and len(result.get("news", [])) >= 3:
         news = result["news"][:WEEKLY_MAX_SEGMENTS]
         result["news"] = news
-        print(f"\n📋 Récap de la semaine ({len(news)} segments) :")
+        _dbg(f"\n📋 Récap de la semaine ({len(news)} segments) :")
         for i, item in enumerate(news, 1):
-            print(f"  {i:2}. [{item.get('source','?')}] {item['titre'][:65]}")
+            _dbg(f"  {i:2}. [{item.get('source','?')}] {item['titre'][:65]}")
+        _write_debug_log(config)
         return result
 
-    print(f"  ⚠️  Structuration Groq échouée ou insuffisante ({len(result.get('news', [])) if result else 0} segments) → récap de démo")
+    _dbg(f"  ⚠️  Structuration Groq échouée ou insuffisante "
+         f"({len(result.get('news', [])) if result else 0} segments) → récap de démo")
+    _write_debug_log(config)
     return _demo_weekly()
 
 
