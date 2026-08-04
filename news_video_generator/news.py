@@ -224,7 +224,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],
-  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'essentiel du jour (ex: 'Voici l'essentiel de l'actu de ce {today}, en trois minutes.')",
+  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'essentiel du jour (ex: 'Voici l'essentiel de l'actu de ce {today}, en moins de deux minutes.')",
   "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'essentiel du jour. On se retrouve demain.')",
   "titre_video": "Titre YouTube au format des chaînes d'actu : 'Sujet 1, sujet 2, sujet 3… Les {n} actus du jour ({today})' — max 95 caractères, sujets en 1-3 mots chacun",
   "hashtags": ["actualités", "5 à 8 hashtags français SANS le symbole #"]
@@ -306,7 +306,7 @@ def get_news(config: dict) -> dict:
         date_str = date_fr(datetime.now())
         return {
             "news":  news,
-            "intro": f"Voici l'essentiel de l'actu du {date_str}, en trois minutes.",
+            "intro": f"Voici l'essentiel de l'actu du {date_str}, en moins de deux minutes.",
             "outro": "C'était l'essentiel du jour. On se retrouve demain.",
             "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
             "hashtags": ["actualités", "journal", "news", "monde", "information"],
@@ -333,7 +333,7 @@ def _demo_news(n: int) -> dict:
     news = [{"titre": t[0], "pays": t[1], "transition": t[2], "resume": t[3], "source": t[4], "categorie": t[5], "keywords_photo": t[6]} for t in topics[:n]]
     return {
         "news":  news,
-        "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en trois minutes.",
+        "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en moins de deux minutes.",
         "outro": "C'était l'essentiel du jour. On se retrouve demain.",
         "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
         "hashtags": ["actualités", "journal", "news", "monde", "information"],
