@@ -128,7 +128,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],
-  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'actu française du jour (ex: 'Voici l'actualité en France de ce {today}, en trois minutes.')",
+  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'actu française du jour (ex: 'Voici l'actualité en France de ce {today}, en moins de deux minutes.')",
   "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'actu France du jour. On se retrouve demain.')",
   "titre_video": "Titre YouTube au format des chaînes d'actu : 'Sujet 1, sujet 2, sujet 3… L'actu France du jour ({today})' — max 95 caractères, sujets en 1-3 mots chacun",
   "hashtags": ["france", "5 à 8 hashtags français SANS le symbole #"]
@@ -204,7 +204,7 @@ def get_france_news(config: dict) -> dict:
             })
         return {
             "news":  news,
-            "intro": f"Voici l'actualité en France de ce {date_fr(datetime.now())}, en trois minutes.",
+            "intro": f"Voici l'actualité en France de ce {date_fr(datetime.now())}, en moins de deux minutes.",
             "outro": "C'était l'actu France du jour. On se retrouve demain.",
             "titre_video": f"🇫🇷 L'actu France du jour — {date_fr(datetime.now(), with_weekday=False)}",
             "hashtags": ["france", "actualité", "francais", "national", "info"],
@@ -237,7 +237,7 @@ def _demo_france(n: int) -> dict:
              "categorie": t[5], "keywords_photo": t[6]} for t in topics[:n]]
     return {
         "news":  news,
-        "intro": "Bienvenue dans votre Spécial France, l'actualité du pays en trois minutes.",
+        "intro": "Bienvenue dans votre Spécial France, l'actualité du pays en moins de deux minutes.",
         "outro": "C'était l'actu France du jour. On se retrouve demain.",
         "titre_video": f"🇫🇷 L'actu France du jour — {date_fr(datetime.now(), with_weekday=False)}",
         "hashtags": ["france", "actualité", "francais", "national", "info"],
