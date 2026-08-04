@@ -238,7 +238,7 @@ def upload_instagram(video_path: str, caption: str, public_url: str) -> str | No
     if not caption:
         caption = (
             f"📰 Journal du Monde — {date_str}\n\n"
-            "5 actualités essentielles en 3 minutes ⏱️\n\n"
+            "5 actualités essentielles en moins de 2 minutes ⏱️\n\n"
             "#actualités #journal #news #monde #information #france"
         )
 
