@@ -66,8 +66,8 @@ def build_metadata(script_data: dict, video_path: str, config: dict | None = Non
     else:
         header       = f"📰 L'essentiel de l'actu — {date_str}"
         summary_lead = "Au sommaire aujourd'hui :"
-        tagline      = "L'essentiel de l'actualité mondiale en 3 minutes, tous les jours."
-        caption_time = "⏱️ L'essentiel en 3 minutes"
+        tagline      = "L'essentiel de l'actualité mondiale en moins de 2 minutes, tous les jours."
+        caption_time = "⏱️ L'essentiel en moins de 2 minutes"
 
     # Description YouTube : sommaire réel du jour → meilleur SEO,
     # description unique chaque jour (YouTube pénalise le contenu dupliqué)
