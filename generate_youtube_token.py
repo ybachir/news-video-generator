@@ -39,7 +39,9 @@ def main():
         print("  5. Télécharge le JSON et renomme-le client_secrets.json")
         sys.exit(1)
 
-    SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+    # youtube.upload = upload vidéos uniquement
+    # youtube        = accès complet (upload + gestion chaîne : description, branding...)
+    SCOPES = ["https://www.googleapis.com/auth/youtube"]
 
     print("🔐 Lancement du flow OAuth2 YouTube...")
     print("   Un navigateur va s'ouvrir pour autoriser l'accès.")
