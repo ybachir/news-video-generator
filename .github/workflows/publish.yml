@@ -15,6 +15,16 @@ jobs:
     name: 📺 Publication YouTube
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Permissions explicites du GITHUB_TOKEN pour ce job. Sans ce bloc, le
+    # job hérite des permissions par défaut du repo — qui peuvent se
+    # retrouver durcies après un changement de visibilité (privé/public)
+    # et faire échouer le téléchargement cross-workflow de l'artifact
+    # (actions/download-artifact@v4) avec l'erreur "Resource not
+    # accessible by integration". Déclarer explicitement actions: read
+    # rend ce job robuste à ce genre de changement de réglage.
+    permissions:
+      contents: read
+      actions: read
     # Ne publie que si le run de génération a réussi, et seulement pour les
     # déclenchements automatiques (cron) ou manuels en mode full — pas pour
     # les runs de test/demo qui ne produisent pas un vrai MP4 à publier.
