@@ -10,6 +10,26 @@ on:
       - "📅 Générer Récap Hebdo France"
       - "📅 Générer Récap Mensuel France"
     types: [completed]
+  # Déclenchement manuel de secours : permet de (re)publier un run de
+  # génération précis sans dépendre du délai de propagation du trigger
+  # workflow_run (peut prendre plusieurs minutes après l'ajout d'une
+  # nouvelle édition à la liste ci-dessus), ou de republier après un échec.
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Run ID du workflow de génération à publier (ex: 31127136622)"
+        required: true
+      edition:
+        description: "Édition publiée"
+        required: true
+        type: choice
+        options:
+          - journal
+          - worldcup
+          - france
+          - deepdive
+          - weekly
+          - monthly
 
 jobs:
   publish:
@@ -26,12 +46,15 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # Ne publie que si le run de génération a réussi, et seulement pour les
-    # déclenchements automatiques (cron) ou manuels en mode full — pas pour
-    # les runs de test/demo qui ne produisent pas un vrai MP4 à publier.
+    # Ne publie que si le run de génération a réussi (cas workflow_run), et
+    # seulement pour les déclenchements automatiques (cron) ou manuels en
+    # mode full — pas pour les runs de test/demo. Le déclenchement manuel de
+    # secours (workflow_dispatch) passe toujours cette condition : c'est
+    # l'utilisateur qui choisit explicitement quoi publier.
     if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'schedule' || github.event.workflow_run.event == 'workflow_dispatch')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'schedule' || github.event.workflow_run.event == 'workflow_dispatch'))
     env:
       # Secrets exposés comme variables d'environnement au niveau du JOB :
       # c'est la seule façon fiable de les référencer ensuite dans les
@@ -41,7 +64,12 @@ jobs:
       YOUTUBE_CLIENT_JSON: ${{ secrets.YOUTUBE_CLIENT_JSON }}
       INSTAGRAM_USER_ID:   ${{ secrets.INSTAGRAM_USER_ID }}
       INSTAGRAM_TOKEN:     ${{ secrets.INSTAGRAM_TOKEN }}
+      # En mode workflow_run (cascade auto), on identifie l'édition via le
+      # nom du workflow déclencheur. En mode workflow_dispatch (manuel de
+      # secours), l'utilisateur la choisit explicitement via l'input.
       WORKFLOW_NAME:       ${{ github.event.workflow_run.name }}
+      MANUAL_EDITION:      ${{ github.event.inputs.edition }}
+      MANUAL_RUN_ID:       ${{ github.event.inputs.source_run_id }}
       REPO:                ${{ github.repository }}
 
     steps:
@@ -62,41 +90,51 @@ jobs:
       - name: ⬇️ Télécharger l'artifact du run de génération
         uses: actions/download-artifact@v4
         with:
-          # Le nom de l'artifact contient le run_number du workflow de
-          # génération (voir generate.yml : "journal-${{ github.run_number }}")
-          # — on utilise le run_id du workflow déclencheur pour cibler le
-          # bon run, peu importe le numéro exact de l'artifact.
-          run-id: ${{ github.event.workflow_run.id }}
+          # Mode cascade : run-id du workflow déclencheur. Mode manuel :
+          # run-id fourni explicitement par l'utilisateur (input).
+          run-id: ${{ github.event.inputs.source_run_id || github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: downloaded
           merge-multiple: true
 
       - name: 📤 Publier chaque vidéo générée
         run: |
-          # Détermine la release GitHub (tag + préfixe des assets) selon le
-          # workflow qui a déclenché cette publication — nécessaire pour
-          # construire l'URL publique correcte (exigée par Instagram/Meta),
-          # différente pour chaque édition.
-          case "$WORKFLOW_NAME" in
-            "📰 Générer Journal Vidéo")
+          # Détermine la release GitHub (tag + préfixe des assets) selon
+          # l'édition — soit déduite du workflow déclencheur (cascade auto),
+          # soit choisie explicitement (déclenchement manuel de secours).
+          EDITION_KEY="$MANUAL_EDITION"
+          if [ -z "$EDITION_KEY" ]; then
+            case "$WORKFLOW_NAME" in
+              "📰 Générer Journal Vidéo")             EDITION_KEY="journal" ;;
+              "⚽ Générer Spécial Coupe du Monde")     EDITION_KEY="worldcup" ;;
+              "🇫🇷 Générer Spécial France")            EDITION_KEY="france" ;;
+              "🔎 Générer Zoom Sur (deepdive)")        EDITION_KEY="deepdive" ;;
+              "📅 Générer Récap Hebdo France")         EDITION_KEY="weekly" ;;
+              "📅 Générer Récap Mensuel France")       EDITION_KEY="monthly" ;;
+              *) echo "❌ Workflow déclencheur inconnu : $WORKFLOW_NAME"; exit 1 ;;
+            esac
+          fi
+
+          case "$EDITION_KEY" in
+            journal)
               RELEASE_TAG="latest"; ASSET_PREFIX="journal_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
-            "⚽ Générer Spécial Coupe du Monde")
+            worldcup)
               RELEASE_TAG="worldcup-latest"; ASSET_PREFIX="mondial_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
-            "🇫🇷 Générer Spécial France")
+            france)
               RELEASE_TAG="france-latest"; ASSET_PREFIX="france_latest"; MULTI="false"; SKIP_INSTAGRAM="false" ;;
-            "🔎 Générer Zoom Sur (deepdive)")
+            deepdive)
               RELEASE_TAG="deepdive-latest"; ASSET_PREFIX="sujet"; MULTI="true"; SKIP_INSTAGRAM="false" ;;
-            "📅 Générer Récap Hebdo France")
+            weekly)
               # Vidéo longue au format PAYSAGE (16:9) : incompatible avec
               # Instagram Reels (vertical, courts) — on ne publie QUE sur
               # YouTube pour cette édition, même si INSTAGRAM_TOKEN est défini.
               RELEASE_TAG="weekly-latest"; ASSET_PREFIX="hebdo_latest"; MULTI="false"; SKIP_INSTAGRAM="true" ;;
-            "📅 Générer Récap Mensuel France")
+            monthly)
               # Même raisonnement que le récap hebdo : format paysage,
               # YouTube uniquement.
               RELEASE_TAG="monthly-latest"; ASSET_PREFIX="mensuel_latest"; MULTI="false"; SKIP_INSTAGRAM="true" ;;
             *)
-              echo "❌ Workflow déclencheur inconnu : $WORKFLOW_NAME"; exit 1 ;;
+              echo "❌ Édition inconnue : $EDITION_KEY"; exit 1 ;;
           esac
 
           shopt -s globstar nullglob
