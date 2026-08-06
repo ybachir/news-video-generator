@@ -85,6 +85,10 @@ from .weekly import (
     fetch_weekly_france_pool, structure_weekly_with_groq,
     get_weekly_france_news, _demo_weekly,
 )
+from .monthly import (
+    default_period as monthly_default_period,
+    get_monthly_france_news, _demo_monthly,
+)
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
@@ -105,6 +109,7 @@ __all__ = [
     "MIN_TOPICS", "MAX_TOPICS", "get_daily_deepdive_scripts",
     "WEEKLY_MAX_AGE_HOURS", "WEEKLY_MIN_SEGMENTS", "WEEKLY_MAX_SEGMENTS",
     "get_weekly_france_news",
+    "monthly_default_period", "get_monthly_france_news",
     "main",
 ]
 
@@ -259,6 +264,16 @@ def main():
         CONFIG.setdefault("FILE_PREFIX",    "hebdo")
         CONFIG.setdefault("FORMAT",         "landscape")
         script_data = get_weekly_france_news(CONFIG)
+    elif theme == "monthly":
+        # Vidéo YouTube LONGUE (format paysage 16:9), récap d'un mois
+        # calendaire complet — script pré-rédigé (voir monthly.py), pas de
+        # scraping RSS (impossible à un mois d'écart).
+        CONFIG.setdefault("EDITION_TOP",    "RÉCAP")
+        CONFIG.setdefault("EDITION_BOTTOM", "DU MOIS")
+        CONFIG.setdefault("EDITION_BRAND",  "RÉCAP MENSUEL")
+        CONFIG.setdefault("FILE_PREFIX",    "mensuel")
+        CONFIG.setdefault("FORMAT",         "landscape")
+        script_data = get_monthly_france_news(CONFIG)
     else:
         # Identité "nouvelle génération" : positionnement des chaînes d'actu
         # les plus vues (l'essentiel, rapide, accessible) — design original
