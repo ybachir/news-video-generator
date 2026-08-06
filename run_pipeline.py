@@ -25,10 +25,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
 parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
 parser.add_argument("--theme", default="journal",
-                    choices=["journal", "worldcup", "france", "deepdive", "weekly"],
+                    choices=["journal", "worldcup", "france", "deepdive", "weekly", "monthly"],
                     help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026 | "
                          "france = Spécial actu France | deepdive = Zoom Sur (1 vidéo détaillée par sujet dominant) | "
-                         "weekly = Récap hebdo France (vidéo longue 16:9, pas un Short)")
+                         "weekly = Récap hebdo France (vidéo longue 16:9, pas un Short) | "
+                         "monthly = Récap mensuel France (vidéo longue 16:9, script pré-rédigé)")
+parser.add_argument("--recap-period", default=None,
+                    help="Mois du récap mensuel au format AAAA_MM (ex: 2026_07). "
+                         "Par défaut : mois précédent la date d'exécution.")
 args = parser.parse_args()
 
 # Mode demo : désactiver les APIs
@@ -51,6 +55,11 @@ elif args.theme == "deepdive":
     print("▶ Édition ZOOM SUR 🔎 (une vidéo détaillée par sujet dominant du jour)")
 elif args.theme == "weekly":
     print("▶ Édition RÉCAP HEBDO 📅 (vidéo longue 16:9, pas un Short)")
+elif args.theme == "monthly":
+    print("▶ Édition RÉCAP MENSUEL 📅 (vidéo longue 16:9, script pré-rédigé)")
+    if args.recap_period:
+        m.CONFIG['RECAP_PERIOD'] = args.recap_period
+        print(f"  ↳ Période : {args.recap_period}")
 
 if args.top_n:
     m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
