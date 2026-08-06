@@ -1,0 +1,107 @@
+{
+  "news": [
+    {
+      "titre": "Juillet 2026, mois le plus chaud jamais enregistré",
+      "transition": "Pour commencer, le fil rouge de tout le mois,",
+      "resume": "Météo-France a confirmé que juillet 2026 est le mois de juillet le plus chaud jamais enregistré dans le pays, avec une température moyenne de 24,9 degrés, devant la canicule d'août 2003 et celle de juillet 2006. Le mois a connu deux vagues de chaleur distinctes, la première du 4 au 19 juillet et la seconde débutée le 28 juillet, avec un excédent de température par rapport aux normales de saison qui dépasse les 5 degrés sur les maximales.",
+      "source": "Météo-France",
+      "categorie": "environnement",
+      "photo_query": "heatwave sun french countryside",
+      "keywords_photo": ["heatwave", "summer sun", "french landscape"]
+    },
+    {
+      "titre": "Incendies historiques en Gironde et dans les Landes",
+      "transition": "Conséquence directe de cette chaleur,",
+      "resume": "Des feux de forêt majeurs ont ravagé la Gironde et les Landes durant la seconde moitié du mois, entraînant l'évacuation de plus de 220 000 personnes en Gironde et 40 000 dans les Landes, notamment autour de la presqu'île du Cap Ferret. L'armée a déployé pour la première fois un avion A400M pour larguer du produit retardant sur les flammes, tandis que deux sapeurs-pompiers sont morts en intervenant près de l'aéroport de Bordeaux-Mérignac.",
+      "source": "Sources multiples",
+      "categorie": "environnement",
+      "photo_query": "wildfire smoke pine forest firefighters",
+      "keywords_photo": ["forest fire", "evacuation", "firefighters"]
+    },
+    {
+      "titre": "Un bilan des noyades en forte hausse",
+      "transition": "Autre conséquence de ces épisodes de chaleur,",
+      "resume": "Les autorités ont recensé 274 morts par noyade entre le 1er mai et le 15 juillet, soit 33 de plus que sur la même période l'an dernier. La majorité de ces drames s'est produite pendant les vagues de canicule, quand la fréquentation des plans d'eau et des plages augmente fortement. Les services de secours rappellent l'importance d'une surveillance constante des baignades, en particulier pour les enfants.",
+      "source": "Sources multiples",
+      "categorie": "sante",
+      "photo_query": "lifeguard beach summer safety",
+      "keywords_photo": ["beach safety", "swimming", "lifeguard"]
+    },
+    {
+      "titre": "Le moustique tigre et ses virus progressent",
+      "transition": "Toujours lié à la chaleur,",
+      "resume": "De nouveaux cas locaux de chikungunya, de dengue et de virus du Nil occidental ont été détectés en France au cours du mois, portés par la progression du moustique tigre désormais implanté sur une large partie du territoire. Les autorités sanitaires appellent à la vigilance et rappellent les gestes de prévention, notamment la suppression des eaux stagnantes propices à la reproduction de l'insecte.",
+      "source": "Sources multiples",
+      "categorie": "sante",
+      "photo_query": "mosquito insect macro public health",
+      "keywords_photo": ["mosquito", "public health", "summer insect"]
+    },
+    {
+      "titre": "Des soldes d'été plombées par la canicule",
+      "transition": "Sur le plan économique,",
+      "resume": "Les soldes d'été, achevées le mardi 21 juillet dans la majorité des départements, ont pâti des fortes chaleurs successives du mois. Plusieurs commerçants rapportent une fréquentation en net retrait dans les rues commerçantes aux heures les plus chaudes de la journée, une partie de la clientèle reportant ses achats en ligne ou en fin de journée plutôt que d'affronter les températures élevées.",
+      "source": "Sources multiples",
+      "categorie": "economie",
+      "photo_query": "shopping street summer sale france",
+      "keywords_photo": ["retail street", "summer sale", "shopping"]
+    },
+    {
+      "titre": "Pogačar remporte un cinquième Tour de France",
+      "transition": "Côté sport, l'évènement du mois,",
+      "resume": "Le Tour de France 2026 s'est achevé le dimanche 26 juillet à Paris, après trois semaines et plus de 3300 kilomètres parcourus depuis Barcelone. Le Slovène Tadej Pogačar a remporté le classement général et le maillot jaune pour la cinquième fois de sa carrière, rejoignant au palmarès Jacques Anquetil, Eddy Merckx, Bernard Hinault et Miguel Indurain. Le Belge Remco Evenepoel termine deuxième et le Mexicain Isaac del Toro troisième.",
+      "source": "Sources multiples",
+      "categorie": "sport",
+      "photo_query": "cycling race mountain stage france",
+      "keywords_photo": ["cycling race", "yellow jersey", "mountain stage"]
+    },
+    {
+      "titre": "Des millions de foyers remboursés par le fisc",
+      "transition": "Bonne nouvelle pour le pouvoir d'achat,",
+      "resume": "L'administration fiscale a entamé à partir du 24 juillet le remboursement de plusieurs millions de foyers ayant trop versé d'impôt sur le revenu au cours de l'année. Ce virement automatique, calculé sur la base de la déclaration de printemps, intervient chaque été et concerne les contribuables dont les acomptes prélevés à la source dépassaient le montant de l'impôt réellement dû.",
+      "source": "Sources multiples",
+      "categorie": "economie",
+      "photo_query": "tax refund finance paperwork",
+      "keywords_photo": ["finance", "tax office", "bank transfer"]
+    },
+    {
+      "titre": "Le maire d'Alès exfiltré après une alerte à la voiture piégée",
+      "transition": "Sur le plan de la sécurité,",
+      "resume": "Le maire d'Alès, Christophe Rivenq, a été exfiltré par les forces du RAID après une suspicion de voiture piégée à proximité de son domicile. Les équipes de déminage ont été mobilisées pour lever le doute, dans un climat de tension entourant plusieurs élus locaux ciblés par des menaces ces derniers mois. Aucune explosion n'a finalement été rapportée sur place.",
+      "source": "Sources multiples",
+      "categorie": "societe",
+      "photo_query": "french town hall police security",
+      "keywords_photo": ["town hall", "police intervention", "security"]
+    },
+    {
+      "titre": "Le Rassemblement national visé par un piratage informatique",
+      "transition": "Toujours côté politique,",
+      "resume": "Le Rassemblement national a annoncé avoir été victime d'un piratage informatique visant ses outils numériques internes et a indiqué vouloir porter plainte. Le parti n'a pas détaillé publiquement la nature exacte des données concernées, tandis qu'une enquête doit permettre d'identifier l'origine de l'intrusion et d'en mesurer l'ampleur réelle.",
+      "source": "Sources multiples",
+      "categorie": "politique",
+      "photo_query": "cybersecurity computer server",
+      "keywords_photo": ["cybersecurity", "hacking", "data breach"]
+    },
+    {
+      "titre": "Polémique autour du retour de pesticides interdits",
+      "transition": "Un texte qui fait débat,",
+      "resume": "La loi d'urgence agricole prévoit la possibilité d'un retour encadré de deux pesticides jusqu'ici interdits en France, une mesure présentée par ses défenseurs comme nécessaire à la compétitivité des agriculteurs face à la concurrence européenne. Des associations environnementales et une partie de la classe politique dénoncent à l'inverse un recul sur la santé publique et la biodiversité.",
+      "source": "Sources multiples",
+      "categorie": "environnement",
+      "photo_query": "farm field tractor french countryside",
+      "keywords_photo": ["agriculture", "farming field", "french countryside"]
+    },
+    {
+      "titre": "Quatre mathématiciens récompensés par la médaille Fields",
+      "transition": "Pour clore ce mois sur les sciences,",
+      "resume": "Quatre mathématiciens ont reçu la médaille Fields, la plus haute distinction internationale de la discipline, décernée tous les quatre ans. Cette édition a été marquée par les discussions autour de l'intelligence artificielle, dont l'essor bouleverse progressivement les méthodes de recherche et de démonstration en mathématiques, un sujet largement commenté par la communauté scientifique internationale.",
+      "source": "Sources multiples",
+      "categorie": "science",
+      "photo_query": "mathematics chalkboard equations research",
+      "keywords_photo": ["mathematics", "science award", "research"]
+    }
+  ],
+  "intro": "Juillet 2026 restera dans les mémoires comme un mois hors normes pour la France : voici tout ce qu'il fallait retenir, en un seul récap complet.",
+  "outro": "C'était le récap complet du mois de juillet. Rendez-vous le mois prochain pour la suite de l'actualité.",
+  "titre_video": "📅 Récap du mois de Juillet 2026 en France — canicule historique, incendies, Tour de France",
+  "hashtags": ["recapmensuel", "france", "actualite", "juillet2026", "canicule", "tourdefrance", "récap"]
+}
