@@ -8,6 +8,7 @@ on:
       - "🇫🇷 Générer Spécial France"
       - "🔎 Générer Zoom Sur (deepdive)"
       - "📅 Générer Récap Hebdo France"
+      - "📅 Générer Récap Mensuel France"
     types: [completed]
 
 jobs:
@@ -90,6 +91,10 @@ jobs:
               # Instagram Reels (vertical, courts) — on ne publie QUE sur
               # YouTube pour cette édition, même si INSTAGRAM_TOKEN est défini.
               RELEASE_TAG="weekly-latest"; ASSET_PREFIX="hebdo_latest"; MULTI="false"; SKIP_INSTAGRAM="true" ;;
+            "📅 Générer Récap Mensuel France")
+              # Même raisonnement que le récap hebdo : format paysage,
+              # YouTube uniquement.
+              RELEASE_TAG="monthly-latest"; ASSET_PREFIX="mensuel_latest"; MULTI="false"; SKIP_INSTAGRAM="true" ;;
             *)
               echo "❌ Workflow déclencheur inconnu : $WORKFLOW_NAME"; exit 1 ;;
           esac
