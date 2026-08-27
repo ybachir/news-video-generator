@@ -19,6 +19,7 @@ from .config import W, H, LANDSCAPE_W, LANDSCAPE_H
 from .render import (
     render_intro, render_outro, render_news_frame, _fonts,
     render_intro_landscape, render_outro_landscape, render_news_frame_landscape,
+    render_news_frame_countdown,
 )
 from .subtitles import build_ass
 
@@ -176,8 +177,12 @@ def build_video(segments: list[dict], photo_paths: list[str],
                                      brand=config.get("EDITION_BRAND", "JOURNAL DU MONDE"))
         else:
             photo_p = photo_map.get(seg["index"], list(photo_map.values())[0])
-            frame   = (render_news_frame_landscape(seg, photo_p, fonts) if landscape
-                      else render_news_frame(seg, photo_p, fonts))
+            if landscape:
+                frame = render_news_frame_landscape(seg, photo_p, fonts)
+            elif config.get("EDITION_STYLE") == "top3":
+                frame = render_news_frame_countdown(seg, photo_p, fonts)
+            else:
+                frame = render_news_frame(seg, photo_p, fonts)
 
         frame_path = str(frames_dir / f"frame_{idx:02d}.png")
         Image.fromarray(frame).save(frame_path)
