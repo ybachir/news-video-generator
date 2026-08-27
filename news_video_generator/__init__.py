@@ -89,6 +89,9 @@ from .monthly import (
     default_period as monthly_default_period,
     get_monthly_france_news, _demo_monthly,
 )
+from .top3 import (
+    structure_top3_with_groq, get_top3_news, _demo_top3,
+)
 
 __all__ = [
     "CONFIG", "PALETTE", "CATEGORY_COLORS", "CATEGORY_ACCENT", "CATEGORY_EN",
@@ -110,6 +113,7 @@ __all__ = [
     "WEEKLY_MAX_AGE_HOURS", "WEEKLY_MIN_SEGMENTS", "WEEKLY_MAX_SEGMENTS",
     "get_weekly_france_news",
     "monthly_default_period", "get_monthly_france_news",
+    "get_top3_news",
     "main",
 ]
 
@@ -264,6 +268,17 @@ def main():
         CONFIG.setdefault("FILE_PREFIX",    "hebdo")
         CONFIG.setdefault("FORMAT",         "landscape")
         script_data = get_weekly_france_news(CONFIG)
+    elif theme == "top3":
+        # Format compte à rebours : 3 sujets seulement, numéro géant à
+        # l'écran (voir render_news_frame_countdown), quel que soit
+        # CONFIG["TOP_N"] passé par erreur — le format N'A DE SENS qu'à 3.
+        CONFIG["TOP_N"]          = 3
+        CONFIG.setdefault("EDITION_TOP",    "TOP 3")
+        CONFIG.setdefault("EDITION_BOTTOM", "DE L'ACTU")
+        CONFIG.setdefault("EDITION_BRAND",  "TOP 3 DE L'ACTU")
+        CONFIG.setdefault("FILE_PREFIX",    "top3")
+        CONFIG.setdefault("EDITION_STYLE",  "top3")   # active le rendu numéro géant
+        script_data = get_top3_news(CONFIG)
     elif theme == "monthly":
         # Vidéo YouTube LONGUE (format paysage 16:9), récap d'un mois
         # calendaire complet — script pré-rédigé (voir monthly.py), pas de
