@@ -247,6 +247,7 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
         segments.append({
             "type":      "news",
             "index":     n,
+            "rang":      item.get("rang", n),   # format Top 3 : 3, 2, 1 (sinon = index)
             "audio":     mp3,
             "duration":  dur,
             "text":      item["resume"],
