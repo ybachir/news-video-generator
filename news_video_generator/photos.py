@@ -231,14 +231,23 @@ def create_styled_background(keywords: list[str], category: str, number: int,
 
     draw = ImageDraw.Draw(img)
 
-    # Numéro discret en filigrane
+    # Numéro discret en filigrane — DOIT être composité sur un calque RGBA :
+    # dessiner directement avec draw.text(fill=(r,g,b,12)) sur une image en
+    # mode RGB (comme c'était fait ici) fait que Pillow ignore silencieusement
+    # le canal alpha et rend le texte en BLANC PLEIN, pas discret du tout
+    # (bug préexistant, invisible tant qu'Unsplash fournissait la plupart des
+    # fonds, mais très visible dès qu'on s'appuie sur les fonds générés — en
+    # particulier avec le chiffre géant du format Top 3, superposé au même endroit).
     try:
         font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 320)
     except Exception:
         font_big = ImageFont.load_default()
 
-    draw.text((w // 2, h // 2 - 80), str(number),
-              font=font_big, fill=(*PALETTE["white"], 12), anchor="mm")
+    watermark = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    wd = ImageDraw.Draw(watermark)
+    wd.text((w // 2, h // 2 - 80), str(number),
+            font=font_big, fill=(*PALETTE["white"], 12), anchor="mm")
+    img = Image.alpha_composite(img.convert("RGBA"), watermark).convert("RGB")
 
     img.save(path, "JPEG", quality=92)
 
@@ -264,7 +273,15 @@ def get_photos(script_data: dict, config: dict, photos_dir: Path) -> list[str]:
         if ok:
             print(f"  🖼️  #{n:2} Unsplash OK  [{cat}]")
         else:
-            create_styled_background(kws, cat, n, path, w=bg_w, h=bg_h)
+            # Filigrane cohérent avec le chiffre affiché à l'écran : pour le
+            # format Top 3 (voir render_news_frame_countdown), l'item porte
+            # un "rang" (3, 2, 1) DIFFÉRENT de sa position dans la liste (n) —
+            # sans cette correction, le filigrane discret du fond montrait un
+            # numéro (position) qui ne correspondait pas au chiffre géant du
+            # classement (rang), donnant l'impression de deux chiffres qui
+            # se contredisent à l'écran. Sur les autres thèmes, "rang" est
+            # absent : le comportement (numéro = position) est inchangé.
+            create_styled_background(kws, cat, item.get("rang", n), path, w=bg_w, h=bg_h)
             print(f"  🎨 #{n:2} Fond premium [{cat}]")
 
         paths.append(path)
