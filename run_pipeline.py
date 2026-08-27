@@ -25,11 +25,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--demo", action="store_true", help="Mode demo sans API")
 parser.add_argument("--top-n", type=int, default=None, help="Nombre de news (défaut: 5)")
 parser.add_argument("--theme", default="journal",
-                    choices=["journal", "worldcup", "france", "deepdive", "weekly", "monthly"],
+                    choices=["journal", "worldcup", "france", "deepdive", "weekly", "monthly", "top3"],
                     help="journal = actu générale | worldcup = Spécial Coupe du Monde 2026 | "
                          "france = Spécial actu France | deepdive = Zoom Sur (1 vidéo détaillée par sujet dominant) | "
                          "weekly = Récap hebdo France (vidéo longue 16:9, pas un Short) | "
-                         "monthly = Récap mensuel France (vidéo longue 16:9, script pré-rédigé)")
+                         "monthly = Récap mensuel France (vidéo longue 16:9, script pré-rédigé) | "
+                         "top3 = Top 3 de l'actu en compte à rebours (3 sujets, numéro géant à l'écran)")
 parser.add_argument("--recap-period", default=None,
                     help="Mois du récap mensuel au format AAAA_MM (ex: 2026_07). "
                          "Par défaut : mois précédent la date d'exécution.")
@@ -60,6 +61,8 @@ elif args.theme == "monthly":
     if args.recap_period:
         m.CONFIG['RECAP_PERIOD'] = args.recap_period
         print(f"  ↳ Période : {args.recap_period}")
+elif args.theme == "top3":
+    print("▶ Édition TOP 3 🏆 (compte à rebours, 3 sujets, numéro géant à l'écran)")
 
 if args.top_n:
     m.CONFIG['TOP_N'] = max(3, min(args.top_n, 10))
