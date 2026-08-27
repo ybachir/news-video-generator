@@ -376,6 +376,119 @@ def render_news_frame(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
     return np.array(img.convert("RGB"))
 
 
+def render_news_frame_countdown(seg: dict, photo_path: str, fonts: dict) -> np.ndarray:
+    """Frame news du format TOP 3 : même base que render_news_frame (photo
+    + bandeau bas doré) mais remplace le petit badge numéro par un CHIFFRE
+    GÉANT en compte à rebours (3 → 2 → 1), effet visuel signature du
+    format 'classement' — c'est le hook qui doit accrocher en 1 coup d'œil."""
+    # ── Photo de fond (identique à render_news_frame) ──
+    try:
+        photo = Image.open(photo_path).convert("RGB")
+        pw, ph = photo.size
+        ratio  = W / H
+        if pw / ph > ratio:
+            nw = int(ph * ratio)
+            photo = photo.crop([(pw - nw) // 2, 0, (pw - nw) // 2 + nw, ph])
+        else:
+            nh = int(pw / ratio)
+            photo = photo.crop([0, (ph - nh) // 2, pw, (ph - nh) // 2 + nh])
+        photo = photo.resize((W, H), Image.LANCZOS)
+    except Exception:
+        photo = Image.new("RGB", (W, H), PALETTE["bg"])
+
+    img = photo.convert("RGBA")
+
+    # ── Voile sombre léger en haut : fait ressortir le chiffre géant doré
+    # sans assombrir toute la photo (contrairement au bandeau bas, plus
+    # opaque, qui sert la lisibilité du titre) ──
+    top_veil = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    tv = ImageDraw.Draw(top_veil)
+    veil_end = 560
+    for y in range(0, veil_end):
+        t     = 1 - (y / veil_end)
+        alpha = int(140 * (t ** 1.3))
+        tv.line([(0, y), (W, y)], fill=(*PALETTE["bg"], alpha))
+    img = Image.alpha_composite(img, top_veil)
+
+    # ── Bandeau bas compact (identique à render_news_frame) ──
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    grad_start = H - 580
+    for y in range(grad_start, H):
+        t     = (y - grad_start) / (H - grad_start)
+        alpha = int(225 * (t ** 0.7))
+        od.line([(0, y), (W, y)], fill=(*PALETTE["bg"], alpha))
+    img = Image.alpha_composite(img, overlay)
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([0, 0, W, 5], fill=(*PALETTE["gold"], 255))
+
+    # ── CHIFFRE GÉANT (rang du classement : 3, 2 ou 1) ──
+    rang = seg.get("rang", seg["index"])
+    try:
+        digit_font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 300)
+    except Exception:
+        digit_font = fonts["bold_xl"]
+    digit_txt = str(rang)
+    cx, cy = W // 2, 250
+    # Ombre portée marquée (le chiffre doit se détacher même sur une photo claire)
+    draw.text((cx + 8, cy + 10), digit_txt, font=digit_font,
+              fill=(0, 0, 0, 150), anchor="mm")
+    # Contour foncé fin autour du chiffre doré, pour la lisibilité sur fonds clairs
+    for ox, oy in [(-3, 0), (3, 0), (0, -3), (0, 3)]:
+        draw.text((cx + ox, cy + oy), digit_txt, font=digit_font,
+                  fill=(10, 10, 18, 220), anchor="mm")
+    draw.text((cx, cy), digit_txt, font=digit_font,
+              fill=(*PALETTE["gold"], 255), anchor="mm")
+
+    # Petit mot-clé "TOP 3" sous le chiffre, ancre la vidéo dans le format
+    label_y = cy + 175
+    draw.text((cx, label_y), "TOP 3", font=fonts["bold_sm"],
+              fill=(*PALETTE["white"], 235), anchor="mm")
+    _draw_gold_line(draw, cx - 60, label_y + 24, cx + 60, thickness=3)
+
+    # ── Tag catégorie (identique à render_news_frame, coin haut droit) ──
+    cat        = seg.get("categorie", "monde")
+    cat_tag    = cat.upper()
+    cat_accent = CATEGORY_ACCENT.get(cat, PALETTE["gold"])
+    bb         = draw.textbbox((0, 0), cat_tag, font=fonts["regular_sm"])
+    tag_text_w = bb[2] - bb[0]
+    tag_w      = tag_text_w + 50
+    tag_x      = W - tag_w - 20
+    draw.rounded_rectangle([tag_x, 18, W - 20, 58],
+                            radius=20, fill=(*PALETTE["bg2"], 225))
+    dot_cx = tag_x + 22
+    draw.ellipse([dot_cx - 6, 38 - 6, dot_cx + 6, 38 + 6], fill=(*cat_accent, 255))
+    draw.text((tag_x + 40, 38), cat_tag,
+              font=fonts["regular_sm"], fill=(*cat_accent, 255), anchor="lm")
+
+    # ── Zone texte bas (identique à render_news_frame) ──
+    pad  = 44
+    y    = H - 420
+
+    title_lines = _wrap(seg["titre"], fonts["bold_lg"], W - pad * 2, draw)
+    for line in title_lines[:2]:
+        draw.text((pad + 5, y + 5), line,
+                  font=fonts["bold_lg"], fill=(0, 0, 0, 190))
+        draw.text((pad, y), line,
+                  font=fonts["bold_lg"], fill=(*PALETTE["white"], 255))
+        y += 70
+
+    _draw_gold_line(draw, pad, y + 6, pad + 100)
+    y += 28
+
+    if seg.get("source"):
+        dot_y = H - 65
+        draw.ellipse([pad, dot_y - 5, pad + 10, dot_y + 5], fill=(*PALETTE["gold"], 220))
+        draw.text((pad + 22, dot_y), seg['source'],
+                  font=fonts["regular_sm"], fill=(*PALETTE["gold"], 200), anchor="lm")
+
+    draw.rectangle([0, H - 5, W, H], fill=(*PALETTE["gold"], 255))
+
+    return np.array(img.convert("RGB"))
+
+
 def render_outro(text: str, fonts: dict,
                  brand: str = "JOURNAL DU MONDE") -> np.ndarray:
     """Écran outro : CTA abonnement + palette premium, glow doré cohérent
