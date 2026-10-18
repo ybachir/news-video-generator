@@ -225,10 +225,15 @@ def generate_all_audio(script_data: dict, config: dict, audio_dir: Path) -> list
 
     # Intro
     intro_text = script_data.get("intro", "Bonjour, voici les actualités du jour.")
+    # Hook visuel affiché en gros dès la 1re frame (voix inchangée : le hook
+    # est AFFICHÉ, pas lu). Optionnel : si absent, l'intro garde son rendu
+    # d'origine (rétrocompatible avec les éditions worldcup/weekly/...).
+    accroche = (script_data.get("accroche") or "").strip()
     mp3, dur, engine, words = make_audio(intro_text, "intro", audio_dir)
     engines_used.append(engine)
     segments.append({"type": "intro", "audio": mp3, "duration": dur,
-                     "text": intro_text, "titre": "Journal du Monde", "words": words})
+                     "text": intro_text, "titre": "Journal du Monde",
+                     "accroche": accroche, "words": words})
     print(f"  ✅ Intro : {dur:.1f}s — moteur : {engine}")
 
     # News

@@ -72,13 +72,53 @@ def _draw_newspaper_icon(draw: ImageDraw, cx: int, cy: int, size: int = 70):
                         fill=(*PALETTE["white"], 220))
 
 
+def _draw_hook_banner(img: Image.Image, draw: ImageDraw, accroche: str,
+                      fonts: dict, y_center: int) -> None:
+    """Dessine le HOOK d'accroche du jour sous forme de bandeau doré plein
+    largeur, texte sombre en gras — le contraste or/noir est le plus fort
+    du template, pour accrocher l'œil dès la 1re frame (rétention Shorts).
+    Dessiné in-place sur `draw`. N'affiche rien si `accroche` est vide."""
+    accroche = (accroche or "").strip().upper()
+    if not accroche:
+        return
+
+    # Police adaptative : on réduit si l'accroche est longue, pour qu'elle
+    # tienne sur 2 lignes max sans déborder de la carte.
+    for font_key in ("bold_md", "bold_sm", "bold_xs"):
+        font  = fonts[font_key]
+        lines = _wrap(accroche, font, W - 220, draw)
+        if len(lines) <= 2:
+            break
+
+    line_h   = draw.textbbox((0, 0), "Ag", font=font)[3] + 10
+    n_lines  = len(lines)
+    band_h   = line_h * n_lines + 36
+    bx0, bx1 = 70, W - 70
+    by0      = y_center - band_h // 2
+    by1      = by0 + band_h
+
+    # Bandeau doré arrondi
+    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=16,
+                            fill=(*PALETTE["gold"], 255))
+    ty = by0 + 18 + line_h // 2
+    for line in lines[:2]:
+        draw.text((W // 2, ty), line, font=font,
+                  fill=(*PALETTE["bg"], 255), anchor="mm")
+        ty += line_h
+
+
 def render_intro(text: str, fonts: dict,
-                 top: str = "JOURNAL", bottom: str = "DU MONDE") -> np.ndarray:
+                 top: str = "JOURNAL", bottom: str = "DU MONDE",
+                 accroche: str = "") -> np.ndarray:
     """Écran d'intro : fond sombre, logo centré, glow doré diffus.
 
     `top`/`bottom` : lignes de la marque (paramétrées pour permettre des
     éditions spéciales, ex. SPÉCIAL / MONDIAL 2026). Si la ligne dorée est
-    trop large pour la carte, on rétrograde automatiquement la police."""
+    trop large pour la carte, on rétrograde automatiquement la police.
+    `accroche` : HOOK visuel du jour (optionnel). S'il est fourni, un
+    bandeau doré accrocheur est affiché sous la date — c'est la raison de
+    NE PAS scroller dans les 2 premières secondes (rétention Shorts).
+    Vide par défaut → rendu d'origine strictement inchangé."""
     img  = Image.new("RGB", (W, H), PALETTE["bg"])
     draw = ImageDraw.Draw(img)
 
@@ -137,9 +177,16 @@ def render_intro(text: str, fonts: dict,
     draw.text((W // 2, H // 2 + 135), date_str,
               font=fonts["regular_sm"], fill=(*PALETTE["gray"], 200), anchor="mm")
 
-    # Texte intro
+    # ── HOOK d'accroche du jour (bandeau doré) ──
+    # Placé sous la date, au-dessus du texte d'intro. S'il est présent, il
+    # pousse le texte d'intro un peu plus bas pour ne pas se chevaucher.
+    has_hook = bool((accroche or "").strip())
+    if has_hook:
+        _draw_hook_banner(img, draw, accroche, fonts, y_center=H // 2 + 210)
+
+    # Texte intro — décalé plus bas quand le hook occupe l'espace au-dessus
     lines = _wrap(text, fonts["regular_md"], W - 160, draw)
-    y0 = H // 2 + 190
+    y0 = (H // 2 + 290) if has_hook else (H // 2 + 190)
     for line in lines[:3]:
         draw.text((W // 2, y0), line,
                   font=fonts["regular_md"], fill=(*PALETTE["gray"], 190), anchor="mm")
