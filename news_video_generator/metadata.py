@@ -52,8 +52,22 @@ def build_metadata(script_data: dict, video_path: str, config: dict | None = Non
     room          = max(0, MAX_HASHTAGS - len(missing_fixed))
     hashtags      = hashtags[:room] + missing_fixed
 
-    titre_video = (script_data.get("titre_video")
-                   or f"Les actus du jour — {date_str}")[:95]
+    # Titre YouTube : priorité au titre accrocheur généré en amont (Groq ou
+    # _build_catchy_title). Fallback de dernier recours amélioré : au lieu
+    # d'un libellé générique identique chaque jour ("Les actus du jour"),
+    # on met en avant le VRAI sujet n°1 (meilleur CTR, titre unique/jour).
+    titre_video = (script_data.get("titre_video") or "").strip()
+    if not titre_video:
+        if titres and titres[0].strip():
+            sujet1 = titres[0].strip().rstrip(".")
+            autres = max(0, len(titres) - 1)
+            if autres > 0:
+                titre_video = f"{sujet1}, et {autres} autres infos — {date_str}"
+            else:
+                titre_video = f"{sujet1} — l'essentiel de l'actu ({date_str})"
+        else:
+            titre_video = f"L'essentiel de l'actu du jour — {date_str}"
+    titre_video = titre_video[:95]
 
     # Texte générique adapté au format : le récap hebdo n'est ni "du jour"
     # ni "en 3 minutes" — un boilerplate incorrect ici serait trompeur

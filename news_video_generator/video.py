@@ -167,7 +167,8 @@ def build_video(segments: list[dict], photo_paths: list[str],
             else:
                 frame = render_intro(seg["text"], fonts,
                                      top=config.get("EDITION_TOP", "JOURNAL"),
-                                     bottom=config.get("EDITION_BOTTOM", "DU MONDE"))
+                                     bottom=config.get("EDITION_BOTTOM", "DU MONDE"),
+                                     accroche=seg.get("accroche", ""))
         elif stype == "outro":
             if landscape:
                 frame = render_outro_landscape(seg["text"], fonts,

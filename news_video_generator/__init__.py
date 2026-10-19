@@ -45,6 +45,7 @@ from .config import (
 from .news import (
     RSS_FEEDS, fetch_rss_raw, structure_with_groq, get_news, _demo_news,
     RSS_MAX_AGE_HOURS, _entry_age_hours, _fmt_age_fr,
+    _build_accroche, _build_catchy_title,
 )
 from .photos import (
     SENSITIVE_TERMS, _search_candidates, _score_candidate, _filter_sensitive_keywords,

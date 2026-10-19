@@ -224,9 +224,10 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],
+  "accroche": "HOOK visuel ultra-court du jour, 3-7 mots MAJUSCULES, affiché en gros dès la 1re seconde de la vidéo. Reprend le sujet n°1 (le plus viral) sous un angle qui donne envie de rester, SANS clickbait mensonger (c'est une chaîne d'actu crédible, le hook doit être vrai). Ex: 'CE QU'IL FAUT RETENIR AUJOURD'HUI', 'GROSSE JOURNÉE EN FRANCE', 'LE CHIFFRE QUI CHOQUE'. Pas de point final.",
   "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'essentiel du jour (ex: 'Voici l'essentiel de l'actu de ce {today}, en moins de deux minutes.')",
   "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'essentiel du jour. On se retrouve demain.')",
-  "titre_video": "Titre YouTube au format des chaînes d'actu : 'Sujet 1, sujet 2, sujet 3… Les {n} actus du jour ({today})' — max 95 caractères, sujets en 1-3 mots chacun",
+  "titre_video": "Titre YouTube À FORT TAUX DE CLIC, max 90 caractères. Combine : le sujet n°1 (le plus viral du jour) formulé pour créer la curiosité + un ressort émotionnel/d'enjeu HONNÊTE (jamais de clickbait trompeur — chaîne d'actu crédible). Finis par un rappel du format quotidien. Varie la formule chaque jour. Ex: 'France 2 à 1 Brésil, et 4 autres infos qui ont marqué ce {today}' ou 'Ce qui a vraiment changé aujourd'hui — l'essentiel de l'actu ({today})'. Évite le format liste froid 'Les 5 actus du jour'.",
   "hashtags": ["actualités", "5 à 8 hashtags français SANS le symbole #"]
 }}"""
 
@@ -270,6 +271,49 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
     return None
 
 
+# Hooks d'accroche de secours (mode démo / RSS brut, quand Groq n'a pas
+# généré de champ "accroche"). Déterministes : on choisit selon le nombre
+# de sujets pour un minimum de variété sans aléatoire (vidéos reproductibles).
+_FALLBACK_ACCROCHES = [
+    "L'ESSENTIEL EN 2 MINUTES",
+    "CE QU'IL FAUT RETENIR AUJOURD'HUI",
+    "L'ACTU DU JOUR, L'ESSENTIEL",
+    "TOUT CE QUI A COMPTÉ AUJOURD'HUI",
+]
+
+
+def _build_accroche(news: list[dict]) -> str:
+    """Construit un hook d'accroche court (MAJUSCULES, 3-7 mots) pour l'intro
+    quand Groq n'en fournit pas. Si un sujet n°1 clair existe, on le met en
+    avant ('À LA UNE : {sujet}') ; sinon un hook générique mais honnête."""
+    if news:
+        titre1 = (news[0].get("titre") or "").strip()
+        # On ne force un hook basé sur le titre que s'il est assez court
+        # pour rester lisible en gros à l'écran — sinon hook générique.
+        words = titre1.split()
+        if 1 <= len(words) <= 5:
+            return f"À LA UNE : {titre1.upper()}"
+    return _FALLBACK_ACCROCHES[len(news) % len(_FALLBACK_ACCROCHES)]
+
+
+def _build_catchy_title(news: list[dict]) -> str:
+    """Titre YouTube de secours à meilleur CTR que 'Les N actus du jour'.
+    Met en avant le VRAI sujet n°1 du jour (curiosity gap honnête) + rappel
+    du format quotidien, au lieu d'un libellé générique identique chaque jour."""
+    date_str = date_fr(datetime.now(), with_weekday=False)
+    if news:
+        titre1 = (news[0].get("titre") or "").strip().rstrip(".")
+        autres = max(0, len(news) - 1)
+        if titre1 and autres > 0:
+            # Format "sujet fort + reste" : donne une raison concrète de
+            # cliquer (le sujet du jour) plutôt qu'un décompte abstrait.
+            base = f"{titre1}, et {autres} autres infos à retenir ce {date_str}"
+            return base[:90]
+        if titre1:
+            return f"{titre1} — l'essentiel de l'actu ({date_str})"[:90]
+    return f"L'essentiel de l'actu du jour ({date_str})"[:90]
+
+
 def get_news(config: dict) -> dict:
     """Pipeline complet de collecte des news."""
     print("\n🔍 ÉTAPE 1 — Collecte & structuration des actualités...")
@@ -284,9 +328,19 @@ def get_news(config: dict) -> dict:
         result = structure_with_groq(raw_articles, config["GROQ_API_KEY"], n)
         if result and len(result.get("news", [])) >= 3:
             news = result["news"][:n]
+            result["news"] = news
+            # Filets de sécurité : si le modèle a omis le hook ou le titre
+            # accrocheur (champ absent/vide), on les reconstruit à partir
+            # des vrais sujets du jour plutôt que de laisser un trou.
+            if not (result.get("accroche") or "").strip():
+                result["accroche"] = _build_accroche(news)
+            if not (result.get("titre_video") or "").strip():
+                result["titre_video"] = _build_catchy_title(news)
             print(f"\n📋 Top {len(news)} actualités :")
             for i, item in enumerate(news, 1):
                 print(f"  {i:2}. [{item['source']}] {item['titre'][:65]}")
+            print(f"  🎯 Accroche : {result['accroche']}")
+            print(f"  📺 Titre    : {result['titre_video']}")
             return result
 
     # 3. Fallback : RSS brut sans IA
@@ -306,9 +360,10 @@ def get_news(config: dict) -> dict:
         date_str = date_fr(datetime.now())
         return {
             "news":  news,
+            "accroche": _build_accroche(news),
             "intro": f"Voici l'essentiel de l'actu du {date_str}, en moins de deux minutes.",
             "outro": "C'était l'essentiel du jour. On se retrouve demain.",
-            "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
+            "titre_video": _build_catchy_title(news),
             "hashtags": ["actualités", "journal", "news", "monde", "information"],
         }
 
@@ -333,8 +388,9 @@ def _demo_news(n: int) -> dict:
     news = [{"titre": t[0], "pays": t[1], "transition": t[2], "resume": t[3], "source": t[4], "categorie": t[5], "keywords_photo": t[6]} for t in topics[:n]]
     return {
         "news":  news,
+        "accroche": _build_accroche(news),
         "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en moins de deux minutes.",
         "outro": "C'était l'essentiel du jour. On se retrouve demain.",
-        "titre_video": f"Les {len(news)} actus du jour ({date_fr(datetime.now(), with_weekday=False)})",
+        "titre_video": _build_catchy_title(news),
         "hashtags": ["actualités", "journal", "news", "monde", "information"],
     }
