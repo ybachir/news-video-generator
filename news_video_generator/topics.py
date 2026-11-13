@@ -272,7 +272,7 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
     }}
   ],
   "intro": "Accroche d'ouverture 'Zoom sur' ce sujet, 10-14 mots (ex: 'Zoom sur {titre_sujet}, on vous explique tout.')",
-  "outro": "Clôture courte, 8-12 mots (ex: 'Voilà pour ce zoom. On se retrouve bientôt.')",
+  "outro": "Clôture avec APPEL À L'ACTION, 10-14 mots MAXIMUM : une question courte sur ce sujet pour déclencher les commentaires, puis invite à s'abonner (ex: 'Qu'en pensez-vous ? Dites-le en commentaire, et abonnez-vous pour la suite.').",
   "titre_video": "Titre YouTube accrocheur centré UNIQUEMENT sur ce sujet (max 90 caractères, avec la date {today})",
   "bandeau": "Version courte du sujet en 2-4 mots MAJUSCULES pour l'écran (ex: 'ÉLECTIONS ANTICIPÉES')",
   "hashtags": ["5 à 8 hashtags français SANS le symbole # liés spécifiquement à ce sujet"]
@@ -385,7 +385,7 @@ def _demo_topics() -> list[dict]:
              "keywords_photo": ["parliament chamber debate", "government building europe", "politics"]},
         ],
         "intro": "Zoom sur l'accord signé aujourd'hui à Bruxelles, on vous explique tout.",
-        "outro": "Voilà pour ce zoom. On se retrouve bientôt pour un autre sujet.",
+        "outro": "Votre avis en commentaire ? Abonnez-vous pour le prochain zoom.",
         "titre_video": f"🔎 Zoom sur l'accord de Bruxelles — {today}",
         "bandeau": "ACCORD BRUXELLES",
         "hashtags": ["zoomsur", "actualité", "europe", "politique", "international"],
@@ -410,7 +410,7 @@ def _demo_topics() -> list[dict]:
              "keywords_photo": ["scientists team meeting", "future technology concept", "research"]},
         ],
         "intro": "Zoom sur cette avancée technologique qui fait parler, on vous explique tout.",
-        "outro": "Voilà pour ce zoom. On se retrouve bientôt pour un autre sujet.",
+        "outro": "Votre avis en commentaire ? Abonnez-vous pour le prochain zoom.",
         "titre_video": f"🔎 Zoom sur la percée technologique du jour — {today}",
         "bandeau": "PERCÉE TECH",
         "hashtags": ["zoomsur", "actualité", "technologie", "science", "innovation"],

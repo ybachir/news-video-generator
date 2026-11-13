@@ -109,6 +109,7 @@ def build_metadata(script_data: dict, video_path: str, config: dict | None = Non
         "caption":     caption,
         "hashtags":    hashtags,
         "titres":      titres,
+        "is_short":    not is_landscape,
     }
 
 

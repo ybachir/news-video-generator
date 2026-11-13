@@ -12,11 +12,11 @@ on:
           - full
           - demo
 
-  # 9h UTC : après le journal (7h) et le spécial France (8h) — laisse le
-  # temps aux flux RSS de se remplir davantage pour une bonne détection
-  # de sujets multi-sources.
+  # 17h UTC : pic d'audience de fin de journée (après le journal à 6h et le
+  # spécial France à 11h). Les flux RSS se sont remplis toute la journée,
+  # ce qui améliore la détection de sujets multi-sources.
   schedule:
-    - cron: "0 9 * * *"
+    - cron: "0 17 * * *"
 
 concurrency:
   group: generate-deepdive
