@@ -142,7 +142,7 @@ lors du découpage.
 - [x] ✅ Musique de fond ambient (mix -18dB, boucle, fade out)
 - [x] ✅ Cascade de secours Unsplash + filtre de mots-clés sensibles (évite les photos hors-sujet/choquantes)
 - [x] ✅ Code organisé en package modulaire (un fichier par étape du pipeline)
-- [x] ✅ GitHub Actions workflow (cron 7h UTC, publication automatique)
+- [x] ✅ GitHub Actions workflow (cron journal 6h UTC, spécial France 11h UTC, Zoom Sur 17h UTC — publication automatique)
 - [x] ✅ Publication YouTube (Data API v3)
 - [x] ✅ Publication Instagram Reels (Meta Graph API)
 - [x] ✅ Métadonnées de publication auto-générées (titre YouTube, description avec sommaire du jour, caption IG, hashtags)

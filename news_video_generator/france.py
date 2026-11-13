@@ -92,7 +92,7 @@ Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le t
 - Neutre et factuel, aucune opinion.
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
-Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale).
+Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale). Pour le TOUT PREMIER sujet, l'intro a déjà servi de hook : n'écris PAS "Premier sujet..." mais une courte amorce ("On vous explique,", "Les détails,").
 
 RÈGLE DE COHÉRENCE (vérifie-la sujet par sujet) : compare CE sujet au sujet qui le précède immédiatement dans ta liste (utilise le champ "region" que tu renseignes toi-même : ville, région, ou "National").
 - N'utilise un mot qui annonce un CHANGEMENT ("cette fois", "maintenant", "Direction...", "Changement de registre") QUE si la région/ville ou le thème a VRAIMENT changé par rapport au sujet précédent.
@@ -128,8 +128,8 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
       "keywords_photo": ["mot_anglais1", "mot_anglais2", "mot_anglais3"]
     }}
   ],
-  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'actu française du jour (ex: 'Voici l'actualité en France de ce {today}, en moins de deux minutes.')",
-  "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'actu France du jour. On se retrouve demain.')",
+  "intro": "HOOK PARLÉ des 3 premières secondes, 6-10 mots MAXIMUM, SANS date ni formule de politesse. Il nomme directement le sujet n°1 de l'actu française en créant la curiosité ou l'enjeu, sans mentir (ex: 'En France, une décision qui change tout dès demain.'). Le premier résumé enchaîne juste après : ne répète pas son contenu.",
+  "outro": "Clôture avec APPEL À L'ACTION, 10-14 mots MAXIMUM : une question courte liée au sujet n°1 pour déclencher les commentaires, puis invite à s'abonner (ex: 'Et vous, qu'en pensez-vous ? Dites-le en commentaire, et abonnez-vous pour demain.').",
   "titre_video": "Titre YouTube au format des chaînes d'actu : 'Sujet 1, sujet 2, sujet 3… L'actu France du jour ({today})' — max 95 caractères, sujets en 1-3 mots chacun",
   "hashtags": ["france", "5 à 8 hashtags français SANS le symbole #"]
 }}"""
@@ -205,7 +205,7 @@ def get_france_news(config: dict) -> dict:
         return {
             "news":  news,
             "intro": f"Voici l'actualité en France de ce {date_fr(datetime.now())}, en moins de deux minutes.",
-            "outro": "C'était l'actu France du jour. On se retrouve demain.",
+            "outro": "Votre avis en commentaire ? Abonnez-vous, on se retrouve demain.",
             "titre_video": f"🇫🇷 L'actu France du jour — {date_fr(datetime.now(), with_weekday=False)}",
             "hashtags": ["france", "actualité", "francais", "national", "info"],
         }
@@ -238,7 +238,7 @@ def _demo_france(n: int) -> dict:
     return {
         "news":  news,
         "intro": "Bienvenue dans votre Spécial France, l'actualité du pays en moins de deux minutes.",
-        "outro": "C'était l'actu France du jour. On se retrouve demain.",
+        "outro": "Votre avis en commentaire ? Abonnez-vous, on se retrouve demain.",
         "titre_video": f"🇫🇷 L'actu France du jour — {date_fr(datetime.now(), with_weekday=False)}",
         "hashtags": ["france", "actualité", "francais", "national", "info"],
     }

@@ -27,7 +27,7 @@ on:
           - monthly
 
   schedule:
-    - cron: "0 7 * * *"
+    - cron: "0 6 * * *"
 
 # Un seul run de génération à la fois (un run manuel pendant le cron
 # n'écrasera pas la release/artifact de l'autre)

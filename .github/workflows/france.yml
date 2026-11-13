@@ -12,10 +12,10 @@ on:
           - full
           - demo
 
-  # 8h UTC : une heure après le journal généraliste (7h UTC), pour laisser
-  # le temps aux médias français de publier leurs premiers articles du jour.
+  # 11h UTC : pic d'audience du midi, 5h après le journal généraliste (6h UTC) —
+  # chaque édition touche ainsi un créneau différent (matin / midi / soir).
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 11 * * *"
 
 concurrency:
   group: generate-france

@@ -185,7 +185,7 @@ Réécris chaque résumé POUR L'OREILLE : il sera lu par une voix off SANS le t
 - Neutre et factuel, aucune opinion.
 - Interdits : style télégraphique, phrases nominales, débuter par un pronom ("Il", "Elle", "Ils") ou une référence vague ("Cette décision...").
 
-Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale).
+Pour transition : écris la phrase d'ACCROCHE ORALE que le présentateur dit juste AVANT le résumé de ce sujet (2-6 mots + virgule finale). Pour le TOUT PREMIER sujet, l'intro a déjà servi de hook : n'écris PAS "Premier sujet..." mais une courte amorce ("On vous explique,", "Les détails,").
 
 RÈGLE DE COHÉRENCE (la plus importante — vérifie-la sujet par sujet) : compare CE sujet au sujet qui le précède immédiatement dans ta liste (utilise le champ "pays" que tu vas toi-même renseigner pour chaque sujet).
 - N'utilise un mot qui annonce un CHANGEMENT ("cette fois", "maintenant", "Direction...", "Changement de registre") QUE si le pays, le lieu ou le thème a VRAIMENT changé par rapport au sujet précédent.
@@ -225,8 +225,8 @@ Réponds UNIQUEMENT avec ce JSON (sans markdown, sans backticks) :
     }}
   ],
   "accroche": "HOOK visuel ultra-court du jour, 3-7 mots MAJUSCULES, affiché en gros dès la 1re seconde de la vidéo. Reprend le sujet n°1 (le plus viral) sous un angle qui donne envie de rester, SANS clickbait mensonger (c'est une chaîne d'actu crédible, le hook doit être vrai). Ex: 'CE QU'IL FAUT RETENIR AUJOURD'HUI', 'GROSSE JOURNÉE EN FRANCE', 'LE CHIFFRE QUI CHOQUE'. Pas de point final.",
-  "intro": "Accroche directe SANS cérémonie, 10-14 mots, qui annonce qu'on fait le tour de l'essentiel du jour (ex: 'Voici l'essentiel de l'actu de ce {today}, en moins de deux minutes.')",
-  "outro": "Clôture avec rendez-vous quotidien, 8-12 mots (ex: 'C'était l'essentiel du jour. On se retrouve demain.')",
+  "intro": "HOOK PARLÉ des 3 premières secondes, 6-10 mots MAXIMUM, SANS date ni formule de politesse ni 'voici l'essentiel'. Il nomme directement le sujet n°1 (le plus viral) en créant la curiosité ou l'enjeu, sans mentir (ex: 'Ce matin, la France retient son souffle.', 'Une annonce qui change tout pour votre quotidien.'). Le premier résumé enchaîne juste après : ne répète pas son contenu.",
+  "outro": "Clôture avec APPEL À L'ACTION, 10-14 mots MAXIMUM : une question courte liée au sujet n°1 pour déclencher les commentaires, puis invite à s'abonner (ex: 'Et vous, qu'en pensez-vous ? Dites-le en commentaire, et abonnez-vous pour demain.'). Vouvoiement ou tutoiement cohérent avec le reste de la vidéo.",
   "titre_video": "Titre YouTube À FORT TAUX DE CLIC, max 90 caractères. Combine : le sujet n°1 (le plus viral du jour) formulé pour créer la curiosité + un ressort émotionnel/d'enjeu HONNÊTE (jamais de clickbait trompeur — chaîne d'actu crédible). Finis par un rappel du format quotidien. Varie la formule chaque jour. Ex: 'France 2 à 1 Brésil, et 4 autres infos qui ont marqué ce {today}' ou 'Ce qui a vraiment changé aujourd'hui — l'essentiel de l'actu ({today})'. Évite le format liste froid 'Les 5 actus du jour'.",
   "hashtags": ["actualités", "5 à 8 hashtags français SANS le symbole #"]
 }}"""
@@ -296,6 +296,23 @@ def _build_accroche(news: list[dict]) -> str:
     return _FALLBACK_ACCROCHES[len(news) % len(_FALLBACK_ACCROCHES)]
 
 
+# Clôture de secours avec appel à l'action (commentaire + abonnement) :
+# l'engagement (commentaires, abonnements) aide la diffusion YouTube.
+# Reste courte : l'écran outro n'affiche que 2 lignes de texte.
+_DEFAULT_OUTRO = "Votre avis en commentaire ? Abonnez-vous, on se retrouve demain."
+
+
+def _build_intro(news: list[dict]) -> str:
+    """Hook parlé de secours (mode démo / RSS brut) : nomme tout de suite le
+    sujet n°1 au lieu d'une formule de politesse — les premières secondes
+    décident de la rétention. Titre trop long → hook générique court."""
+    if news:
+        titre1 = (news[0].get("titre") or "").strip().rstrip(".!?")
+        if 1 <= len(titre1.split()) <= 8:
+            return f"À la une : {titre1}."
+    return "Voici ce qu'il faut retenir aujourd'hui."
+
+
 def _build_catchy_title(news: list[dict]) -> str:
     """Titre YouTube de secours à meilleur CTR que 'Les N actus du jour'.
     Met en avant le VRAI sujet n°1 du jour (curiosity gap honnête) + rappel
@@ -357,12 +374,11 @@ def get_news(config: dict) -> dict:
                 "categorie":      "monde",
                 "keywords_photo": words or ["world", "news"],
             })
-        date_str = date_fr(datetime.now())
         return {
             "news":  news,
             "accroche": _build_accroche(news),
-            "intro": f"Voici l'essentiel de l'actu du {date_str}, en moins de deux minutes.",
-            "outro": "C'était l'essentiel du jour. On se retrouve demain.",
+            "intro": _build_intro(news),
+            "outro": _DEFAULT_OUTRO,
             "titre_video": _build_catchy_title(news),
             "hashtags": ["actualités", "journal", "news", "monde", "information"],
         }
@@ -389,8 +405,8 @@ def _demo_news(n: int) -> dict:
     return {
         "news":  news,
         "accroche": _build_accroche(news),
-        "intro": f"Voici l'essentiel de l'actu du {date_fr(datetime.now(), with_weekday=False)}, en moins de deux minutes.",
-        "outro": "C'était l'essentiel du jour. On se retrouve demain.",
+        "intro": _build_intro(news),
+        "outro": _DEFAULT_OUTRO,
         "titre_video": _build_catchy_title(news),
         "hashtags": ["actualités", "journal", "news", "monde", "information"],
     }

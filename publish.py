@@ -88,7 +88,50 @@ def load_metadata(video_path: str) -> dict:
 #  YOUTUBE
 # ═══════════════════════════════════════════════════════════════
 
-def upload_youtube(video_path: str, title: str, description: str) -> str | None:
+DEFAULT_YOUTUBE_TAGS = ["actualités", "journal", "news", "monde", "information",
+                        "france", "politique", "économie"]
+YOUTUBE_TAGS_MAX_CHARS = 450   # limite API : 500 caractères cumulés (marge de sécurité)
+YOUTUBE_TITLE_MAX = 100
+
+
+def build_youtube_tags(hashtags: list[str] | None, is_short: bool = True) -> list[str]:
+    """Tags YouTube : hashtags du jour d'abord (spécifiques au contenu),
+    puis tags génériques, sans doublon (insensible à la casse), plafonnés
+    à la limite cumulée de l'API. 'Shorts' est forcé pour les formats
+    verticaux et jamais ajouté aux vidéos longues."""
+    ordered = [h.lstrip("#").strip() for h in (hashtags or []) if h and h.strip()]
+    if is_short:
+        ordered.append("Shorts")
+    ordered += DEFAULT_YOUTUBE_TAGS
+
+    tags, seen, total = [], set(), 0
+    for tag in ordered:
+        key = tag.lower()
+        if key in seen:
+            continue
+        cost = len(tag) + 1 + (2 if " " in tag else 0)   # séparateur (+ guillemets si espace)
+        if total + cost > YOUTUBE_TAGS_MAX_CHARS:
+            break
+        seen.add(key)
+        tags.append(tag)
+        total += cost
+    return tags
+
+
+def build_youtube_title(title: str, is_short: bool = True) -> str:
+    """Titre ≤ 100 caractères (limite API). Pour un Short, YouTube détecte
+    le format via la durée/ratio ; '#Shorts' est ajouté au titre seulement
+    s'il reste de la place, pour renforcer le classement dans le flux Shorts."""
+    title = (title or "").strip()
+    suffix = " #Shorts"
+    if is_short and "#shorts" not in title.lower() and len(title) + len(suffix) <= YOUTUBE_TITLE_MAX:
+        title += suffix
+    return title[:YOUTUBE_TITLE_MAX]
+
+
+def upload_youtube(video_path: str, title: str, description: str,
+                   hashtags: list[str] | None = None,
+                   is_short: bool = True) -> str | None:
     """
     Upload une vidéo sur YouTube via l'API Data v3.
 
@@ -149,14 +192,14 @@ def upload_youtube(video_path: str, title: str, description: str) -> str | None:
         date_str = datetime.now().strftime("%d/%m/%Y")
         body = {
             "snippet": {
-                "title":       title or f"Journal du Monde — {date_str}",
+                "title":       build_youtube_title(
+                                   title or f"Journal du Monde — {date_str}", is_short),
                 "description": description or (
                     f"Journal d'actualités automatique du {date_str}\n\n"
                     "Généré automatiquement • Actualités mondiales • 5 infos essentielles\n\n"
                     "#actualités #journal #news #monde #information"
                 ),
-                "tags": ["actualités", "journal", "news", "monde", "information",
-                         "france", "politique", "économie"],
+                "tags": build_youtube_tags(hashtags, is_short),
                 "categoryId": "25",   # 25 = News & Politics
                 "defaultLanguage": "fr",
             },
@@ -356,7 +399,9 @@ def main():
     if platform in ("youtube", "all"):
         print("📺 YOUTUBE")
         print("─" * 60)
-        url = upload_youtube(video_path, title, description)
+        url = upload_youtube(video_path, title, description,
+                             hashtags=meta.get("hashtags"),
+                             is_short=meta.get("is_short", True))
         results["youtube"] = url
         print()
 
